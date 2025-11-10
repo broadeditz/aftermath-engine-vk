@@ -160,12 +160,19 @@ private:
         createImageViews();
 		std::cout << "creating command pool" << std::endl;
         createCommandPool();
+		std::cout << "creating compute screen" << std::endl;
         computeScreen.create(allocator, device, swapChainExtent.width, swapChainExtent.height);
+		std::cout << "creating compute pipeline" << std::endl;
         createComputePipeline();
+		std::cout << "creating graphics pipeline" << std::endl;
         createGraphicsPipeline();
+		std::cout << "creating vertex buffer" << std::endl;
         createVertexBuffer();
+		std::cout << "creating index buffer" << std::endl;
         createIndexBuffer();
+		std::cout << "creating command buffers" << std::endl;
         createCommandBuffers();
+		std::cout << "creating synchronization objects" << std::endl;
         createSyncObjects();
     }
 
