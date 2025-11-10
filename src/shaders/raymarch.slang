@@ -18,13 +18,15 @@ public raymarchResult raymarch(float3 rayOrigin, float3 rayDirection, int maxSte
     int steps = 0;
     bool hit = false;
 
-    float frequency = 0.05;
-    float amplitude = 0.3;
+    float frequency = 0.00;
+    float amplitude = 0.0;
 
     for (steps = 0; steps < maxSteps; steps++) {
         // create perpendicular vectors to ray direction
         float3 right = normalize(cross(lastDirection, float3(0, 1, 0)));
         float3 up = normalize(cross(lastDirection, right));
+
+        //float3 offset = up * (cos(totalDistance * frequency) * amplitude);
 
         float3 offset = right * (sin(totalDistance * frequency) * amplitude) +
                         up * (cos(totalDistance * frequency) * amplitude);

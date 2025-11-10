@@ -44,6 +44,20 @@ RWTexture2D<float4> outputImage;
 [[vk::binding(0, 1)]]
 ConstantBuffer<FrameUniforms> frameUniforms;
 
+// Simple hash function for pseudo-random numbers
+float hash(float2 p) {
+    float3 p3 = frac(float3(p.xyx) * 0.1031);
+    p3 += dot(p3, p3.yzx + 33.33);
+    return frac((p3.x + p3.y) * p3.z);
+}
+
+// Generate random point in unit disk
+float2 randomInUnitDisk(float2 seed) {
+    float angle = hash(seed) * 6.28318530718; // 2 * PI
+    float radius = sqrt(hash(seed + 0.1));
+    return float2(cos(angle), sin(angle)) * radius;
+}
+
 [shader("compute")]
 [numthreads(16, 16, 1)]
 void computeMain(uint3 dispatchThreadID: SV_DispatchThreadID) {
@@ -53,29 +67,57 @@ void computeMain(uint3 dispatchThreadID: SV_DispatchThreadID) {
 
     float aspectRatio = float(width) / float(height);
 
-    float3 rayOrigin = float3(0.0, 0.0, frameUniforms.time * 0.4);
-    float3 rayDirection = normalize(float3(
+    float fov = 2.0;
+    float focusDistance = 25.0 * abs(sin(frameUniforms.time * 0.5)) + 10;
+    float aperture = 0.1;
+
+    int samplesPerPixel = 1;
+
+    float3 colorAccum = float3(0.0, 0.0, 0.0);
+    int hitSamples = 0;
+
+    // Calculate position on the image plane (focal plane)
+    float2 uv = float2(
         (float(pixelCoords.x) / float(width) - 0.5) * 2.0 * aspectRatio,
-        (float(pixelCoords.y) / float(height) - 0.5) * 2.0,
-        1.0
-    ));
+        (float(pixelCoords.y) / float(height) - 0.5) * 2.0
+    );
 
-    if (pixelCoords.x >= width || pixelCoords.y >= height) {
-        return;
+    float3 cameraPosition = float3(0.0, 0.0, frameUniforms.time * 0.4);
+
+    // Point on the image plane (determines FOV)
+    float3 imagePoint = float3(uv.x, uv.y, fov) + cameraPosition;
+
+    float3 centerDirection = normalize(imagePoint - cameraPosition);
+
+    // Focal point at the desired focus distance (this is where all rays should converge)
+    float3 focalPoint = cameraPosition + centerDirection * focusDistance;
+
+    for (int i = 0; i < samplesPerPixel; i++) {
+        // apply aperture offset to ray origin
+        float2 seed = float2(pixelCoords) + float2(i * 123.45) + frameUniforms.time * 1000.0;
+        float2 apertureOffset = randomInUnitDisk(seed) * aperture;
+        float3 rayOrigin = cameraPosition + float3(apertureOffset.x, apertureOffset.y, 0.0);
+
+        // Final ray direction: from offset origin TO the fixed focal point
+        float3 rayDirection = normalize(focalPoint - rayOrigin);
+
+        if (pixelCoords.x >= width || pixelCoords.y >= height) {
+            return;
+        }
+
+        raymarchResult result = raymarch(rayOrigin, rayDirection, 500, 100000.0, 0.01, frameUniforms.time);
+
+        if (result.hit) {
+            float smoothSteps = float(result.steps) + result.lastStepSize / 0.01;
+            smoothSteps = pow(smoothSteps, 0.7);
+            // float distanceFade = result.distance / 200.0;
+
+            colorAccum += float3(1.0 / (smoothSteps / 3));
+            hitSamples++;
+        }
     }
 
-    raymarchResult result = raymarch(rayOrigin, rayDirection, 500, 100000.0, 0.01, frameUniforms.time);
-
-    if (!result.hit) {
-        outputImage[pixelCoords] = float4(0.0, 0.0, 0.0, 1.0);
-        return;
-    }
-
-    float smoothSteps = float(result.steps) + result.lastStepSize / 0.01;
-    smoothSteps = pow(smoothSteps, 0.7);
-    //float distanceFade = result.distance / 200.0;
-
-    outputImage[pixelCoords] = float4(float3(1.0 / (smoothSteps / 3)), 1.0);
+    outputImage[pixelCoords] = float4(colorAccum / float(samplesPerPixel), 1.0);
 }
 
 // foo
