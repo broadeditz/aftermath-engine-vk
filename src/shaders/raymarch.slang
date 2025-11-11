@@ -10,7 +10,7 @@ public struct raymarchResult {
     public bool hit;
 }
 
-public raymarchResult raymarch(float3 rayOrigin, float3 rayDirection, int maxSteps, float maxDistance, float epsilon, float time) {
+public raymarchResult raymarch(float3 rayOrigin, float3 rayDirection, int maxSteps, float maxDistance, float epsilon) {
     float totalDistance = 0.0;
     float stepSize = 0.0;
     float3 lastPosition = rayOrigin;
@@ -21,8 +21,10 @@ public raymarchResult raymarch(float3 rayOrigin, float3 rayDirection, int maxSte
     float frequency = 0.00;
     float amplitude = 0.0;
 
+    bool enableWobble = (frequency != 0 && amplitude != 0);
+
     for (steps = 0; steps < maxSteps; steps++) {
-        if (frequency != 0 && amplitude != 0) {
+        if (enableWobble) {
             // create perpendicular vectors to ray direction
             float3 right = normalize(cross(lastDirection, float3(0, 1, 0)));
             float3 up = normalize(cross(lastDirection, right));
@@ -35,14 +37,6 @@ public raymarchResult raymarch(float3 rayOrigin, float3 rayDirection, int maxSte
         };
 
         float3 currentPosition = lastPosition + lastDirection * stepSize;
-
-
-        //float3 offset = float3(cos(totalDistance * 0.1) * 0.5, sin(totalDistance * 0.1) * 0.5, 0);
-        //float3 wiggledDirection = normalize(rayDirection * stepSize + offset);
-        //
-        //float3 currentPosition = lastPosition + wiggledDirection * stepSize;
-
-        //float3 currentPosition = rayOrigin + rayDirection * totalDistance;
 
         stepSize = sceneSDF(currentPosition);
         totalDistance += stepSize;

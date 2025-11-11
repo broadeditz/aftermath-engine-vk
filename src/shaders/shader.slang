@@ -1,5 +1,6 @@
 import raymarch;
 import sdf;
+import octree;
 
 struct VertexInput {
     float2 inPosition;
@@ -34,10 +35,25 @@ float4 fragMain(VertexOutput vertIn) : SV_Target {
 
 struct FrameUniforms {
     float time;
+    // aperture is the diameter of the camera aperture, in world units
     float aperture;
+    // focusDistance is the distance from the camera to the focal plane, in world units
     float focusDistance;
+    // fov is the magnification factor for the camera, larger values mean a narrower field of view
     float fov;
 };
+
+struct RenderUniforms {
+    int maxSteps;
+    int maxBounces;
+    float maxDistance;
+    // epsilon is the minimum distance to consider a hit
+    float epsilon;
+}
+
+// Binding 3 set 0
+[[vk::binding(3, 0)]]
+StructuredBuffer<OctreeNode> octreeBuffer;
 
 // Binding 2 set 0
 [[vk::binding(2, 0)]]
@@ -75,7 +91,7 @@ void computeMain(uint3 dispatchThreadID: SV_DispatchThreadID) {
 
     float aspectRatio = float(width) / float(height);
 
-    int samplesPerPixel = 1;
+    int samplesPerPixel = 4;
 
     float3 colorAccum = float3(0.0, 0.0, 0.0);
 
@@ -96,19 +112,15 @@ void computeMain(uint3 dispatchThreadID: SV_DispatchThreadID) {
     float3 focalPoint = cameraPosition + centerDirection * frameUniforms.focusDistance;
 
     for (int i = 0; i < samplesPerPixel; i++) {
-        float3 rayOrigin = cameraPosition;
-
-        if (frameUniforms.aperture > 0.0) {
-            // apply aperture offset to ray origin
-            float2 seed = float2(pixelCoords) + float2(i * 123.45) + frameUniforms.time;
-            float2 apertureOffset = randomInUnitDisk(seed) * frameUniforms.aperture;
-            rayOrigin = cameraPosition + float3(apertureOffset.x, apertureOffset.y, 0.0);
-        }
+        // apply aperture offset to ray origin
+        float2 seed = float2(pixelCoords) + float2(i * 123.45) + frameUniforms.time;
+        float2 apertureOffset = randomInUnitDisk(seed) * frameUniforms.aperture;
+        float3 rayOrigin = cameraPosition + float3(apertureOffset.x, apertureOffset.y, 0.0);
 
         // Final ray direction: from offset origin TO the fixed focal point
         float3 rayDirection = normalize(focalPoint - rayOrigin);
 
-        raymarchResult result = raymarch(rayOrigin, rayDirection, 500, 100000.0, 0.01, frameUniforms.time);
+        raymarchResult result = raymarch(rayOrigin, rayDirection, 200, 100000.0, 0.01);
 
         if (result.hit) {
             float smoothSteps = float(result.steps) + result.lastStepSize / 0.01;

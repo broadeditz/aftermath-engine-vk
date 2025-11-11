@@ -122,7 +122,7 @@ add_executable (main
     main.cpp
     screen/computescreen.cpp
     uniforms/frame.cpp
- "uniforms/render.cpp")
+ "uniforms/render.cpp" "buffers/octree.cpp")
 set_target_properties (main PROPERTIES CXX_STANDARD 20)
 target_link_libraries (main Vulkan::cppm glfw glm::glm KTX::ktx GPUOpen::VulkanMemoryAllocator)
 target_include_directories (main PRIVATE ${STB_INCLUDEDIR} "screen")

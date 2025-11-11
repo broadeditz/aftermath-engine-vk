@@ -4,6 +4,7 @@
 void ComputeToScreen::create(VmaAllocator allocator, const vk::raii::Device& device, uint32_t w, uint32_t h) {
     width = w;
     height = h;
+    vmaAllocator = allocator;
 
     std::cout << "Creating compute image: " << width << "x" << height << std::endl;
 
@@ -49,23 +50,31 @@ void ComputeToScreen::create(VmaAllocator allocator, const vk::raii::Device& dev
 
     sampler = vk::raii::Sampler(device, samplerInfo);
 
+    octreeBuffer.init(allocator);
+
     // 4. Create descriptor set layouts
-    // Compute layout (storage image)
-    vk::DescriptorSetLayoutBinding computeBinding;
-    computeBinding.binding = 2;
-    computeBinding.descriptorType = vk::DescriptorType::eStorageImage;
-    computeBinding.descriptorCount = 1;
-    computeBinding.stageFlags = vk::ShaderStageFlagBits::eCompute;
+    vk::DescriptorSetLayoutBinding computeBindings[2];
+
+    // Binding 3: Octree storage buffer
+    computeBindings[0].binding = 3;
+    computeBindings[0].descriptorType = vk::DescriptorType::eStorageBuffer;
+    computeBindings[0].descriptorCount = 1;
+    computeBindings[0].stageFlags = vk::ShaderStageFlagBits::eCompute;
+
+    // Binding 2: Storage image
+    computeBindings[1].binding = 2;
+    computeBindings[1].descriptorType = vk::DescriptorType::eStorageImage;
+    computeBindings[1].descriptorCount = 1;
+    computeBindings[1].stageFlags = vk::ShaderStageFlagBits::eCompute;
 
     vk::DescriptorSetLayoutCreateInfo computeLayoutInfo;
-    computeLayoutInfo.bindingCount = 1;
-    computeLayoutInfo.pBindings = &computeBinding;
+    computeLayoutInfo.bindingCount = 2;
+    computeLayoutInfo.pBindings = computeBindings;
 
     computeLayout = vk::raii::DescriptorSetLayout(device, computeLayoutInfo);
 
-    // Graphics layout (combined image sampler)
+    // Graphics layou
     vk::DescriptorSetLayoutBinding graphicsBindings[2];
-    // Binding 0: Texture (sampled image)
     graphicsBindings[0].binding = 0;
     graphicsBindings[0].descriptorType = vk::DescriptorType::eSampledImage;
     graphicsBindings[0].descriptorCount = 1;
@@ -83,21 +92,28 @@ void ComputeToScreen::create(VmaAllocator allocator, const vk::raii::Device& dev
     graphicsLayout = vk::raii::DescriptorSetLayout(device, graphicsLayoutInfo);
 
     // 5. Create descriptor pool
-    vk::DescriptorPoolSize poolSizes[3];
-    // compute - storage image
-    poolSizes[0].type = vk::DescriptorType::eStorageImage;
+    vk::DescriptorPoolSize poolSizes[4];  // CHANGED: from 3 to 4
+
+    // compute - storage buffer
+    poolSizes[0].type = vk::DescriptorType::eStorageBuffer;
     poolSizes[0].descriptorCount = 1;
-    // graphics - sampled image
-    poolSizes[1].type = vk::DescriptorType::eSampledImage;
+
+    // compute - storage image
+    poolSizes[1].type = vk::DescriptorType::eStorageImage;
     poolSizes[1].descriptorCount = 1;
-    // graphics - sampler
-    poolSizes[2].type = vk::DescriptorType::eSampler;
+
+    // graphics - sampled image
+    poolSizes[2].type = vk::DescriptorType::eSampledImage;
     poolSizes[2].descriptorCount = 1;
+
+    // graphics - sampler
+    poolSizes[3].type = vk::DescriptorType::eSampler;
+    poolSizes[3].descriptorCount = 1;
 
     vk::DescriptorPoolCreateInfo poolInfo;
     poolInfo.flags = vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet;
     poolInfo.maxSets = 2;
-    poolInfo.poolSizeCount = 3;
+    poolInfo.poolSizeCount = 4;
     poolInfo.pPoolSizes = poolSizes;
 
     pool = vk::raii::DescriptorPool(device, poolInfo);
@@ -116,19 +132,24 @@ void ComputeToScreen::create(VmaAllocator allocator, const vk::raii::Device& dev
     graphicsSet = *graphicsSets[0];
 
     // 7. Update descriptor sets
-    // Compute set (storage image)
+    std::vector<vk::WriteDescriptorSet> computeWrites;
+
+    // Octree buffer descriptor info (will be updated when octree data is set)
+    // TODO: update this later in setOctreeData(), but need to allocate space
+
+    // Storage image
     vk::DescriptorImageInfo storageImageInfo;
     storageImageInfo.imageView = *view;
     storageImageInfo.imageLayout = vk::ImageLayout::eGeneral;
 
-    vk::WriteDescriptorSet computeWrite;
-    computeWrite.dstSet = computeSet;
-    computeWrite.dstBinding = 2;
-    computeWrite.descriptorCount = 1;
-    computeWrite.descriptorType = vk::DescriptorType::eStorageImage;
-    computeWrite.pImageInfo = &storageImageInfo;
+    vk::WriteDescriptorSet storageImageWrite;
+    storageImageWrite.dstSet = computeSet;
+    storageImageWrite.dstBinding = 2;
+    storageImageWrite.descriptorCount = 1;
+    storageImageWrite.descriptorType = vk::DescriptorType::eStorageImage;
+    storageImageWrite.pImageInfo = &storageImageInfo;
 
-    device.updateDescriptorSets(computeWrite, nullptr);
+    device.updateDescriptorSets(storageImageWrite, nullptr);
 
     // Graphics set (combined image sampler)
     vk::DescriptorImageInfo sampledImageInfo;
@@ -136,14 +157,12 @@ void ComputeToScreen::create(VmaAllocator allocator, const vk::raii::Device& dev
     sampledImageInfo.imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
 
     vk::WriteDescriptorSet graphicsWrites[2];
-    // Graphics set - binding 0 (sampled image)
     graphicsWrites[0].dstSet = graphicsSet;
     graphicsWrites[0].dstBinding = 0;
     graphicsWrites[0].descriptorCount = 1;
     graphicsWrites[0].descriptorType = vk::DescriptorType::eSampledImage;
     graphicsWrites[0].pImageInfo = &sampledImageInfo;
 
-    // Graphics set - binding 1 (sampler)
     vk::DescriptorImageInfo samplerWritesInfo;
     samplerWritesInfo.sampler = *sampler;
 
@@ -157,12 +176,12 @@ void ComputeToScreen::create(VmaAllocator allocator, const vk::raii::Device& dev
 
     frameData.create(device, allocator);
     descriptorSets = {
-        computeSet,                    // set 0: storage image
+        computeSet,                    // set 0: storage buffer (octree) + storage image
         frameData.getDescriptorSet()   // set 1: frame uniforms
     };
 
     std::vector<vk::DescriptorSetLayout> setLayouts = {
-        *computeLayout, // set 0
+        *computeLayout,                     // set 0
         frameData.getDescriptorSetLayout(), // set 1
     };
 
@@ -180,9 +199,51 @@ void ComputeToScreen::create(VmaAllocator allocator, const vk::raii::Device& dev
     graphicsPipelineLayout = vk::raii::PipelineLayout(device, graphicsPipelineLayoutInfo);
 }
 
+void ComputeToScreen::setOctreeData(const std::vector<OctreeNode>& octreeData) {
+    if (octreeData.empty()) {
+        std::cerr << "Warning: Empty octree data" << std::endl;
+        return;
+    }
+
+    std::cout << "Loading octree with " << octreeData.size() << " nodes" << std::endl;
+
+    // Create/update octree buffer
+    if (!octreeBuffer.create(octreeData)) {
+        std::cerr << "Failed to create octree buffer" << std::endl;
+        return;
+    }
+
+    // Update descriptor set with octree buffer
+    VkDescriptorBufferInfo bufferInfo{};
+    bufferInfo.buffer = octreeBuffer.getBuffer();
+    bufferInfo.offset = 0;
+    bufferInfo.range = VK_WHOLE_SIZE;
+
+    VkWriteDescriptorSet write{};
+    write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    write.dstSet = VkDescriptorSet(computeSet);
+    write.dstBinding = 3;
+    write.descriptorCount = 1;
+    write.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    write.pBufferInfo = &bufferInfo;
+
+    vkUpdateDescriptorSets(view.getDevice(), 1, &write, 0, nullptr);
+
+    std::cout << "Octree buffer bound to descriptor set" << std::endl;
+}
+
+void ComputeToScreen::updateOctreeNode(uint32_t index, const OctreeNode& node) {
+    octreeBuffer.updateNode(index, node);
+}
+
+void ComputeToScreen::updateOctreeRange(uint32_t startIndex, uint32_t count, const OctreeNode* nodes) {
+    octreeBuffer.updateRange(startIndex, count, nodes);
+}
+
 void ComputeToScreen::destroy(VmaAllocator allocator) {
+    octreeBuffer.destroy();
+
     // RAII objects will be destroyed automatically
-    // Only need to clean up VMA-managed resources
     vmaDestroyImage(allocator, VkImage(image), allocation);
     frameData.destroy();
 }
@@ -202,29 +263,27 @@ void ComputeToScreen::initialTransition(const vk::raii::CommandBuffer& cmd) {
         vk::PipelineStageFlagBits::eTopOfPipe,
         vk::PipelineStageFlagBits::eComputeShader,
         vk::DependencyFlags{},
-        nullptr,  // memory barriers
-        nullptr,  // buffer memory barriers
-        barrier   // image memory barriers
+        nullptr,
+        nullptr,
+        barrier
     );
 }
 
 void ComputeToScreen::recordCompute(const vk::raii::CommandBuffer& cmd, const vk::raii::Pipeline& computePipeline) {
     cmd.bindPipeline(vk::PipelineBindPoint::eCompute, *computePipeline);
 
-    // Bind both descriptor sets in one call (set 0 and set 1)
     cmd.bindDescriptorSets(
         vk::PipelineBindPoint::eCompute,
         *computePipelineLayout,
-        0,  // firstSet = 0
+        0,
         descriptorSets,
-        nullptr  // dynamic offsets
+        nullptr
     );
 
     uint32_t groupsX = (width + 15) / 16;
     uint32_t groupsY = (height + 15) / 16;
     cmd.dispatch(groupsX, groupsY, 1);
 
-    // Barrier: GENERAL -> SHADER_READ_ONLY
     vk::ImageMemoryBarrier barrier;
     barrier.srcAccessMask = vk::AccessFlagBits::eShaderWrite;
     barrier.dstAccessMask = vk::AccessFlagBits::eShaderRead;
@@ -239,9 +298,9 @@ void ComputeToScreen::recordCompute(const vk::raii::CommandBuffer& cmd, const vk
         vk::PipelineStageFlagBits::eComputeShader,
         vk::PipelineStageFlagBits::eFragmentShader,
         vk::DependencyFlags{},
-        nullptr,  // memory barriers
-        nullptr,  // buffer memory barriers
-        barrier   // image memory barriers
+        nullptr,
+        nullptr,
+        barrier
     );
 }
 
@@ -272,8 +331,8 @@ void ComputeToScreen::transitionBack(const vk::raii::CommandBuffer& cmd) {
         vk::PipelineStageFlagBits::eFragmentShader,
         vk::PipelineStageFlagBits::eComputeShader,
         vk::DependencyFlags{},
-        nullptr,  // memory barriers
-        nullptr,  // buffer memory barriers
-        barrier   // image memory barriers
+        nullptr,
+        nullptr,
+        barrier
     );
 }

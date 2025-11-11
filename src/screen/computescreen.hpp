@@ -2,6 +2,7 @@
 #include <vulkan/vulkan_raii.hpp>
 #include <vk_mem_alloc.h>
 #include "../uniforms/frame.hpp"
+#include "../buffers/octree.hpp"
 
 class ComputeToScreen {
 public:
@@ -13,13 +14,18 @@ public:
     vk::raii::DescriptorSetLayout graphicsLayout = nullptr;
 	vk::raii::DescriptorSets computeSets = nullptr;
 	vk::raii::DescriptorSets graphicsSets = nullptr;
-    std::array<vk::DescriptorSet, 2> descriptorSets;
+    std::vector<vk::DescriptorSet> descriptorSets;
     vk::raii::DescriptorPool pool = nullptr;
+
     vk::DescriptorSet computeSet;  // Keep raw - owned by pool
-    vk::DescriptorSet graphicsSet; // Keep raw - owned by pool
     vk::raii::PipelineLayout computePipelineLayout = nullptr;
+
+    vk::DescriptorSet graphicsSet; // Keep raw - owned by pool
     vk::raii::PipelineLayout graphicsPipelineLayout = nullptr;
+
     FrameDataManager frameData;
+    OctreeBuffer octreeBuffer;
+    VmaAllocator vmaAllocator;
 
     uint32_t width, height;
 
@@ -37,4 +43,8 @@ public:
 
     // Transition back to GENERAL for next frame
     void transitionBack(const vk::raii::CommandBuffer& cmd);
+
+    void setOctreeData(const std::vector<OctreeNode>& octreeData);
+    void updateOctreeNode(uint32_t index, const OctreeNode& node);
+    void updateOctreeRange(uint32_t startIndex, uint32_t count, const OctreeNode* nodes);
 };
