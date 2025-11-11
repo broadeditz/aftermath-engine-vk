@@ -5,6 +5,7 @@ It is designed to simulate stupendously large and detailed environments using vo
 
 ## Features
 - Ray Marching: Utilizes ray marching techniques for rendering complex 3D scenes.
+- Ray projection onto variable aperture surface, for depth of field and bokeh effects.
 
 
 ## TODO/bug list
