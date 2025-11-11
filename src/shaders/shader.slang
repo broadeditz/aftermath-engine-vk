@@ -96,10 +96,14 @@ void computeMain(uint3 dispatchThreadID: SV_DispatchThreadID) {
     float3 focalPoint = cameraPosition + centerDirection * frameUniforms.focusDistance;
 
     for (int i = 0; i < samplesPerPixel; i++) {
-        // apply aperture offset to ray origin
-        float2 seed = float2(pixelCoords) + float2(i * 123.45) + frameUniforms.time;
-        float2 apertureOffset = randomInUnitDisk(seed) * frameUniforms.aperture;
-        float3 rayOrigin = cameraPosition + float3(apertureOffset.x, apertureOffset.y, 0.0);
+        float3 rayOrigin = cameraPosition;
+
+        if (frameUniforms.aperture > 0.0) {
+            // apply aperture offset to ray origin
+            float2 seed = float2(pixelCoords) + float2(i * 123.45) + frameUniforms.time;
+            float2 apertureOffset = randomInUnitDisk(seed) * frameUniforms.aperture;
+            rayOrigin = cameraPosition + float3(apertureOffset.x, apertureOffset.y, 0.0);
+        }
 
         // Final ray direction: from offset origin TO the fixed focal point
         float3 rayDirection = normalize(focalPoint - rayOrigin);
