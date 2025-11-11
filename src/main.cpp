@@ -603,7 +603,6 @@ private:
             lastTime = std::chrono::steady_clock::now();
         }
 
-
         auto [result, imageIndex] = swapChain.acquireNextImage(UINT64_MAX, *presentCompleteSemaphores[semaphoreIndex], nullptr);
         if (result == vk::Result::eErrorOutOfDateKHR || framebufferResized) {
             framebufferResized = false;
@@ -614,7 +613,7 @@ private:
 
         auto currentTime = std::chrono::high_resolution_clock::now();
         float time = std::chrono::duration<float>(currentTime - startTime).count();
-        computeScreen.frameData.update(time);
+        computeScreen.frameData.update(FrameUniforms{time, 0.0, 25, 1.5});
 
         device.resetFences(*inFlightFences[currentFrame]);
         commandBuffers[currentFrame].reset();

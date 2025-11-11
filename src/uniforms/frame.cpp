@@ -80,10 +80,8 @@ void FrameDataManager::create(const vk::raii::Device& device, VmaAllocator alloc
     device.updateDescriptorSets(descriptorWrite, nullptr);
 }
 
-void FrameDataManager::update(float time) {
+void FrameDataManager::update(FrameUniforms uniforms) {
     if (m_mappedData) {
-        FrameUniforms uniforms{};
-        uniforms.time = time;
         memcpy(m_mappedData, &uniforms, sizeof(FrameUniforms));
     }
 }

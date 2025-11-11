@@ -22,17 +22,19 @@ public raymarchResult raymarch(float3 rayOrigin, float3 rayDirection, int maxSte
     float amplitude = 0.0;
 
     for (steps = 0; steps < maxSteps; steps++) {
-        // create perpendicular vectors to ray direction
-        float3 right = normalize(cross(lastDirection, float3(0, 1, 0)));
-        float3 up = normalize(cross(lastDirection, right));
+        if (frequency != 0 && amplitude != 0) {
+            // create perpendicular vectors to ray direction
+            float3 right = normalize(cross(lastDirection, float3(0, 1, 0)));
+            float3 up = normalize(cross(lastDirection, right));
 
-        //float3 offset = up * (cos(totalDistance * frequency) * amplitude);
+            //float3 offset = up * (cos(totalDistance * frequency) * amplitude);
 
-        float3 offset = right * (sin(totalDistance * frequency) * amplitude) +
-                        up * (cos(totalDistance * frequency) * amplitude);
-        float3 wiggledDirection = normalize(rayDirection + offset);
-        
-        float3 currentPosition = lastPosition + wiggledDirection * stepSize;
+            float3 offset = right * (sin(totalDistance * frequency) * amplitude) +
+                            up * (cos(totalDistance * frequency) * amplitude);
+            lastDirection = normalize(rayDirection + offset);
+        };
+
+        float3 currentPosition = lastPosition + lastDirection * stepSize;
 
 
         //float3 offset = float3(cos(totalDistance * 0.1) * 0.5, sin(totalDistance * 0.1) * 0.5, 0);
@@ -53,7 +55,6 @@ public raymarchResult raymarch(float3 rayOrigin, float3 rayDirection, int maxSte
             break;
         }
         lastPosition = currentPosition;
-        lastDirection = wiggledDirection;
     }
 
     raymarchResult res;

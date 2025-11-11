@@ -2,9 +2,11 @@
 #include <vulkan/vulkan_raii.hpp>
 #include <vk_mem_alloc.h>
 
-// Must match your shader struct exactly
 struct FrameUniforms {
     float time;
+    float aperture;
+    float focusDistance;
+    float fov;
 };
 
 class FrameDataManager {
@@ -16,7 +18,7 @@ public:
     void create(const vk::raii::Device& device, VmaAllocator allocator);
 
     // Update time every frame
-    void update(float time);
+    void update(FrameUniforms uniforms);
 
     // Bind descriptor set in command buffer
     void bind(const vk::raii::CommandBuffer& commandBuffer,

@@ -34,6 +34,9 @@ float4 fragMain(VertexOutput vertIn) : SV_Target {
 
 struct FrameUniforms {
     float time;
+    float aperture;
+    float focusDistance;
+    float fov;
 };
 
 // Binding 2 set 0
@@ -62,19 +65,19 @@ float2 randomInUnitDisk(float2 seed) {
 [numthreads(16, 16, 1)]
 void computeMain(uint3 dispatchThreadID: SV_DispatchThreadID) {
     uint2 pixelCoords = dispatchThreadID.xy;
+
     uint width, height;
     outputImage.GetDimensions(width, height);
 
-    float aspectRatio = float(width) / float(height);
+    if (pixelCoords.x >= width || pixelCoords.y >= height) {
+        return;
+    }
 
-    float fov = 2.0;
-    float focusDistance = 25.0 * abs(sin(frameUniforms.time * 0.5)) + 10;
-    float aperture = 0.1;
+    float aspectRatio = float(width) / float(height);
 
     int samplesPerPixel = 1;
 
     float3 colorAccum = float3(0.0, 0.0, 0.0);
-    int hitSamples = 0;
 
     // Calculate position on the image plane (focal plane)
     float2 uv = float2(
@@ -85,25 +88,21 @@ void computeMain(uint3 dispatchThreadID: SV_DispatchThreadID) {
     float3 cameraPosition = float3(0.0, 0.0, frameUniforms.time * 0.4);
 
     // Point on the image plane (determines FOV)
-    float3 imagePoint = float3(uv.x, uv.y, fov) + cameraPosition;
+    float3 imagePoint = float3(uv.x, uv.y, frameUniforms.fov) + cameraPosition;
 
     float3 centerDirection = normalize(imagePoint - cameraPosition);
 
     // Focal point at the desired focus distance (this is where all rays should converge)
-    float3 focalPoint = cameraPosition + centerDirection * focusDistance;
+    float3 focalPoint = cameraPosition + centerDirection * frameUniforms.focusDistance;
 
     for (int i = 0; i < samplesPerPixel; i++) {
         // apply aperture offset to ray origin
-        float2 seed = float2(pixelCoords) + float2(i * 123.45) + frameUniforms.time * 1000.0;
-        float2 apertureOffset = randomInUnitDisk(seed) * aperture;
+        float2 seed = float2(pixelCoords) + float2(i * 123.45) + frameUniforms.time;
+        float2 apertureOffset = randomInUnitDisk(seed) * frameUniforms.aperture;
         float3 rayOrigin = cameraPosition + float3(apertureOffset.x, apertureOffset.y, 0.0);
 
         // Final ray direction: from offset origin TO the fixed focal point
         float3 rayDirection = normalize(focalPoint - rayOrigin);
-
-        if (pixelCoords.x >= width || pixelCoords.y >= height) {
-            return;
-        }
 
         raymarchResult result = raymarch(rayOrigin, rayDirection, 500, 100000.0, 0.01, frameUniforms.time);
 
@@ -113,32 +112,8 @@ void computeMain(uint3 dispatchThreadID: SV_DispatchThreadID) {
             // float distanceFade = result.distance / 200.0;
 
             colorAccum += float3(1.0 / (smoothSteps / 3));
-            hitSamples++;
         }
     }
 
     outputImage[pixelCoords] = float4(colorAccum / float(samplesPerPixel), 1.0);
 }
-
-// foo
-
-/*[shader("compute")]
-[numthreads(16, 16, 1)]
-void computeMain(uint3 dispatchThreadID: SV_DispatchThreadID) {
-    uint2 pixelCoords = dispatchThreadID.xy;
-    uint width, height;
-    outputImage.GetDimensions(width, height);
-
-    if (pixelCoords.x >= width || pixelCoords.y >= height) {
-        return;
-    }
-
-    // Output pixel coordinates as color (normalized)
-    float3 color = float3(
-        float(pixelCoords.x) / float(width),
-        float(pixelCoords.y) / float(height),
-        0.0
-    );
-
-    outputImage[pixelCoords] = float4(color, 1.0);
-}*/
