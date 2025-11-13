@@ -50,12 +50,12 @@ void ComputeToScreen::create(VmaAllocator allocator, const vk::raii::Device& dev
 
     sampler = vk::raii::Sampler(device, samplerInfo);
 
-    octreeBuffer.init(allocator);
+    treeBuffer.init(allocator);
 
     // 4. Create descriptor set layouts
     vk::DescriptorSetLayoutBinding computeBindings[2];
 
-    // Binding 3: Octree storage buffer
+    // Binding 3: Tree storage buffer
     computeBindings[0].binding = 3;
     computeBindings[0].descriptorType = vk::DescriptorType::eStorageBuffer;
     computeBindings[0].descriptorCount = 1;
@@ -134,8 +134,8 @@ void ComputeToScreen::create(VmaAllocator allocator, const vk::raii::Device& dev
     // 7. Update descriptor sets
     std::vector<vk::WriteDescriptorSet> computeWrites;
 
-    // Octree buffer descriptor info (will be updated when octree data is set)
-    // TODO: update this later in setOctreeData(), but need to allocate space
+    // Tree buffer descriptor info (will be updated when tree data is set)
+    // TODO: update this later in setTreeData(), but need to allocate space
 
     // Storage image
     vk::DescriptorImageInfo storageImageInfo;
@@ -176,7 +176,7 @@ void ComputeToScreen::create(VmaAllocator allocator, const vk::raii::Device& dev
 
     frameData.create(device, allocator);
     descriptorSets = {
-        computeSet,                    // set 0: storage buffer (octree) + storage image
+        computeSet,                    // set 0: storage buffer (tree) + storage image
         frameData.getDescriptorSet()   // set 1: frame uniforms
     };
 
@@ -199,23 +199,23 @@ void ComputeToScreen::create(VmaAllocator allocator, const vk::raii::Device& dev
     graphicsPipelineLayout = vk::raii::PipelineLayout(device, graphicsPipelineLayoutInfo);
 }
 
-void ComputeToScreen::setOctreeData(const std::vector<OctreeNode>& octreeData) {
-    if (octreeData.empty()) {
-        std::cerr << "Warning: Empty octree data" << std::endl;
+void ComputeToScreen::setTreeData(const std::vector<TreeNode>& treeData) {
+    if (treeData.empty()) {
+        std::cerr << "Warning: Empty tree data" << std::endl;
         return;
     }
 
-    std::cout << "Loading octree with " << octreeData.size() << " nodes" << std::endl;
+    std::cout << "Loading tree with " << treeData.size() << " nodes" << std::endl;
 
-    // Create/update octree buffer
-    if (!octreeBuffer.create(octreeData)) {
-        std::cerr << "Failed to create octree buffer" << std::endl;
+    // Create/update tree buffer
+    if (!treeBuffer.create(treeData)) {
+        std::cerr << "Failed to create tree buffer" << std::endl;
         return;
     }
 
-    // Update descriptor set with octree buffer
+    // Update descriptor set with tree buffer
     VkDescriptorBufferInfo bufferInfo{};
-    bufferInfo.buffer = octreeBuffer.getBuffer();
+    bufferInfo.buffer = treeBuffer.getBuffer();
     bufferInfo.offset = 0;
     bufferInfo.range = VK_WHOLE_SIZE;
 
@@ -229,19 +229,19 @@ void ComputeToScreen::setOctreeData(const std::vector<OctreeNode>& octreeData) {
 
     vkUpdateDescriptorSets(view.getDevice(), 1, &write, 0, nullptr);
 
-    std::cout << "Octree buffer bound to descriptor set" << std::endl;
+    std::cout << "Tree buffer bound to descriptor set" << std::endl;
 }
 
-void ComputeToScreen::updateOctreeNode(uint32_t index, const OctreeNode& node) {
-    octreeBuffer.updateNode(index, node);
+void ComputeToScreen::updateTreeNode(uint32_t index, const TreeNode& node) {
+    treeBuffer.updateNode(index, node);
 }
 
-void ComputeToScreen::updateOctreeRange(uint32_t startIndex, uint32_t count, const OctreeNode* nodes) {
-    octreeBuffer.updateRange(startIndex, count, nodes);
+void ComputeToScreen::updateTreeRange(uint32_t startIndex, uint32_t count, const TreeNode* nodes) {
+    treeBuffer.updateRange(startIndex, count, nodes);
 }
 
 void ComputeToScreen::destroy(VmaAllocator allocator) {
-    octreeBuffer.destroy();
+    treeBuffer.destroy();
 
     // RAII objects will be destroyed automatically
     vmaDestroyImage(allocator, VkImage(image), allocation);

@@ -7,7 +7,19 @@ public struct raymarchResult {
     public float distance;
     public float lastStepSize;
     public int steps;
-    public bool hit;
+    public uint8_t hits;
+}
+
+float3 getNormal(float3 pos) {
+    // Tetrahedral normal estimation
+    float2 k = float2(1, -1);
+    float h = 0.001;
+    return normalize(
+        k.xyy * sceneSDF(pos + k.xyy * h) +
+        k.yyx * sceneSDF(pos + k.yyx * h) +
+        k.yxy * sceneSDF(pos + k.yxy * h) +
+        k.xxx * sceneSDF(pos + k.xxx * h)
+    );
 }
 
 public raymarchResult raymarch(float3 rayOrigin, float3 rayDirection, int maxSteps, float maxDistance, float epsilon) {
@@ -16,7 +28,7 @@ public raymarchResult raymarch(float3 rayOrigin, float3 rayDirection, int maxSte
     float3 lastPosition = rayOrigin;
     float3 lastDirection = rayDirection;
     int steps = 0;
-    bool hit = false;
+    uint8_t hits = 0;
 
     float frequency = 0.00;
     float amplitude = 0.0;
@@ -42,8 +54,14 @@ public raymarchResult raymarch(float3 rayOrigin, float3 rayDirection, int maxSte
         totalDistance += stepSize;
 
         if (stepSize < epsilon) {
-            hit = true;
+            hits++;
             break;
+
+            // TODO: continue to make this functional
+            // bounce the ray
+            //float3 surfaceNormal = getNormal(currentPosition);
+            //lastDirection = reflect(lastDirection, surfaceNormal);
+            //break;
         }
         if (totalDistance >= maxDistance) {
             break;
@@ -55,7 +73,7 @@ public raymarchResult raymarch(float3 rayOrigin, float3 rayDirection, int maxSte
     res.distance = totalDistance;
     res.lastStepSize = stepSize;
     res.steps = steps;
-    res.hit = hit;
+    res.hits = hits;
     return res;
 }
 

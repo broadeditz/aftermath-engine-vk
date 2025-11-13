@@ -6,36 +6,31 @@
 #include <cstdint>
 #include <cstring>
 
-// Octree node structure - must match shader definition
-struct OctreeNode {
-    uint32_t childPointer;
-    uint8_t childMask;
-    uint8_t material;
-    uint16_t padding;
-};
+#include "tree.hpp"
 
-class OctreeBuffer {
+
+class TreeBuffer {
 public:
-    OctreeBuffer() = default;
-    ~OctreeBuffer() = default;
+    TreeBuffer() = default;
+    ~TreeBuffer() = default;
 
     // Initialize with allocator
     void init(VmaAllocator allocator);
 
     // Create buffer with initial data
-    bool create(const std::vector<OctreeNode>& initialData);
+    bool create(const std::vector<TreeNode>& initialData);
 
     // Create empty buffer with capacity
     bool createEmpty(size_t nodeCapacity);
 
     // Update entire buffer
-    void update(const std::vector<OctreeNode>& data);
+    void update(const std::vector<TreeNode>& data);
 
     // Update range of nodes
-    void updateRange(uint32_t startIndex, uint32_t count, const OctreeNode* nodes);
+    void updateRange(uint32_t startIndex, uint32_t count, const TreeNode* nodes);
 
     // Update single node
-    void updateNode(uint32_t index, const OctreeNode& node);
+    void updateNode(uint32_t index, const TreeNode& node);
 
     // Get buffer for descriptor binding
     VkBuffer getBuffer() const { return m_buffer; }
@@ -61,11 +56,11 @@ private:
     void flush(VkDeviceSize offset, VkDeviceSize size);
 };
 
-// Chunked octree manager for streaming large worlds
-class ChunkedOctreeBuffer {
+// Chunked tree manager for streaming large worlds
+class ChunkedTreeBuffer {
 public:
-    ChunkedOctreeBuffer() = default;
-    ~ChunkedOctreeBuffer() = default;
+    ChunkedTreeBuffer() = default;
+    ~ChunkedTreeBuffer() = default;
 
     struct ChunkInfo {
         uint32_t startIndex;
@@ -77,14 +72,14 @@ public:
     void init(VmaAllocator allocator, uint32_t maxChunks, uint32_t nodesPerChunk);
 
     // Load chunk data into specific slot
-    bool loadChunk(uint32_t chunkIndex, const std::vector<OctreeNode>& chunkData);
+    bool loadChunk(uint32_t chunkIndex, const std::vector<TreeNode>& chunkData);
 
     // Unload chunk (marks as unoccupied, optionally clears memory)
     void unloadChunk(uint32_t chunkIndex, bool clearMemory = false);
 
     // Update nodes within a chunk
     void updateChunkNodes(uint32_t chunkIndex, uint32_t nodeOffset,
-        uint32_t count, const OctreeNode* nodes);
+        uint32_t count, const TreeNode* nodes);
 
     // Get chunk info
     const ChunkInfo& getChunkInfo(uint32_t chunkIndex) const;
@@ -99,7 +94,7 @@ public:
     void destroy();
 
 private:
-    OctreeBuffer m_buffer;
+    TreeBuffer m_buffer;
     std::vector<ChunkInfo> m_chunks;
     uint32_t m_maxChunks = 0;
     uint32_t m_nodesPerChunk = 0;

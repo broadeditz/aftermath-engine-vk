@@ -1,6 +1,6 @@
 import raymarch;
 import sdf;
-import octree;
+import tree;
 
 struct VertexInput {
     float2 inPosition;
@@ -53,7 +53,7 @@ struct RenderUniforms {
 
 // Binding 3 set 0
 [[vk::binding(3, 0)]]
-StructuredBuffer<OctreeNode> octreeBuffer;
+StructuredBuffer<TreeNode> octreeBuffer;
 
 // Binding 2 set 0
 [[vk::binding(2, 0)]]
@@ -120,9 +120,9 @@ void computeMain(uint3 dispatchThreadID: SV_DispatchThreadID) {
         // Final ray direction: from offset origin TO the fixed focal point
         float3 rayDirection = normalize(focalPoint - rayOrigin);
 
-        raymarchResult result = raymarch(rayOrigin, rayDirection, 200, 100000.0, 0.01);
+        raymarchResult result = raymarch(rayOrigin, rayDirection, 200, 100000.0, 0.001);
 
-        if (result.hit) {
+        if (result.hits > 0) {
             float smoothSteps = float(result.steps) + result.lastStepSize / 0.01;
             smoothSteps = pow(smoothSteps, 0.7);
             // float distanceFade = result.distance / 200.0;

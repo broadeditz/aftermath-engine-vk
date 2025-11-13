@@ -1,4 +1,4 @@
-#include "octree.hpp"
+#include "buffer.hpp"
 #include <algorithm>
 #include <stdexcept>
 
@@ -6,11 +6,11 @@
 // OctreeBuffer Implementation
 // ============================================================================
 
-void OctreeBuffer::init(VmaAllocator allocator) {
+void TreeBuffer::init(VmaAllocator allocator) {
     m_allocator = allocator;
 }
 
-bool OctreeBuffer::create(const std::vector<OctreeNode>& initialData) {
+bool TreeBuffer::create(const std::vector<TreeNode>& initialData) {
     if (!m_allocator) {
         return false;
     }
@@ -22,7 +22,7 @@ bool OctreeBuffer::create(const std::vector<OctreeNode>& initialData) {
     m_nodeCount = initialData.size();
     m_capacity = m_nodeCount;
 
-    VkDeviceSize bufferSize = m_capacity * sizeof(OctreeNode);
+    VkDeviceSize bufferSize = m_capacity * sizeof(TreeNode);
 
     // Buffer create info
     VkBufferCreateInfo bufferInfo{};
@@ -58,7 +58,7 @@ bool OctreeBuffer::create(const std::vector<OctreeNode>& initialData) {
     return true;
 }
 
-bool OctreeBuffer::createEmpty(size_t nodeCapacity) {
+bool TreeBuffer::createEmpty(size_t nodeCapacity) {
     if (!m_allocator) {
         return false;
     }
@@ -70,7 +70,7 @@ bool OctreeBuffer::createEmpty(size_t nodeCapacity) {
     m_nodeCount = 0;
     m_capacity = nodeCapacity;
 
-    VkDeviceSize bufferSize = m_capacity * sizeof(OctreeNode);
+    VkDeviceSize bufferSize = m_capacity * sizeof(TreeNode);
 
     VkBufferCreateInfo bufferInfo{};
     bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
@@ -103,7 +103,7 @@ bool OctreeBuffer::createEmpty(size_t nodeCapacity) {
     return true;
 }
 
-void OctreeBuffer::update(const std::vector<OctreeNode>& data) {
+void TreeBuffer::update(const std::vector<TreeNode>& data) {
     if (!m_buffer || data.empty()) {
         return;
     }
@@ -115,13 +115,13 @@ void OctreeBuffer::update(const std::vector<OctreeNode>& data) {
     }
 
     m_nodeCount = data.size();
-    VkDeviceSize size = m_nodeCount * sizeof(OctreeNode);
+    VkDeviceSize size = m_nodeCount * sizeof(TreeNode);
 
     std::memcpy(m_allocationInfo.pMappedData, data.data(), size);
     flush(0, size);
 }
 
-void OctreeBuffer::updateRange(uint32_t startIndex, uint32_t count, const OctreeNode* nodes) {
+void TreeBuffer::updateRange(uint32_t startIndex, uint32_t count, const TreeNode* nodes) {
     if (!m_buffer || !nodes || count == 0) {
         return;
     }
@@ -131,8 +131,8 @@ void OctreeBuffer::updateRange(uint32_t startIndex, uint32_t count, const Octree
         return;
     }
 
-    VkDeviceSize offset = startIndex * sizeof(OctreeNode);
-    VkDeviceSize size = count * sizeof(OctreeNode);
+    VkDeviceSize offset = startIndex * sizeof(TreeNode);
+    VkDeviceSize size = count * sizeof(TreeNode);
 
     uint8_t* dst = static_cast<uint8_t*>(m_allocationInfo.pMappedData) + offset;
     std::memcpy(dst, nodes, size);
@@ -143,7 +143,7 @@ void OctreeBuffer::updateRange(uint32_t startIndex, uint32_t count, const Octree
     m_nodeCount = std::max(m_nodeCount, static_cast<size_t>(startIndex + count));
 }
 
-void OctreeBuffer::updateNode(uint32_t index, const OctreeNode& node) {
+void TreeBuffer::updateNode(uint32_t index, const TreeNode& node) {
     if (!m_buffer) {
         return;
     }
@@ -153,17 +153,17 @@ void OctreeBuffer::updateNode(uint32_t index, const OctreeNode& node) {
         return;
     }
 
-    OctreeNode* nodes = static_cast<OctreeNode*>(m_allocationInfo.pMappedData);
+    TreeNode* nodes = static_cast<TreeNode*>(m_allocationInfo.pMappedData);
     nodes[index] = node;
 
-    VkDeviceSize offset = index * sizeof(OctreeNode);
-    flush(offset, sizeof(OctreeNode));
+    VkDeviceSize offset = index * sizeof(TreeNode);
+    flush(offset, sizeof(TreeNode));
 
     // Update node count if necessary
     m_nodeCount = std::max(m_nodeCount, static_cast<size_t>(index + 1));
 }
 
-void OctreeBuffer::destroy() {
+void TreeBuffer::destroy() {
     if (m_buffer != VK_NULL_HANDLE) {
         vmaDestroyBuffer(m_allocator, m_buffer, m_allocation);
         m_buffer = VK_NULL_HANDLE;
@@ -174,17 +174,17 @@ void OctreeBuffer::destroy() {
     m_capacity = 0;
 }
 
-void OctreeBuffer::flush(VkDeviceSize offset, VkDeviceSize size) {
+void TreeBuffer::flush(VkDeviceSize offset, VkDeviceSize size) {
     if (m_allocation != VK_NULL_HANDLE) {
         vmaFlushAllocation(m_allocator, m_allocation, offset, size);
     }
 }
 
 // ============================================================================
-// ChunkedOctreeBuffer Implementation
+// ChunkedTreeBuffer Implementation
 // ============================================================================
 
-void ChunkedOctreeBuffer::init(VmaAllocator allocator, uint32_t maxChunks, uint32_t nodesPerChunk) {
+void ChunkedTreeBuffer::init(VmaAllocator allocator, uint32_t maxChunks, uint32_t nodesPerChunk) {
     m_maxChunks = maxChunks;
     m_nodesPerChunk = nodesPerChunk;
 
@@ -203,7 +203,7 @@ void ChunkedOctreeBuffer::init(VmaAllocator allocator, uint32_t maxChunks, uint3
     }
 }
 
-bool ChunkedOctreeBuffer::loadChunk(uint32_t chunkIndex, const std::vector<OctreeNode>& chunkData) {
+bool ChunkedTreeBuffer::loadChunk(uint32_t chunkIndex, const std::vector<TreeNode>& chunkData) {
     if (chunkIndex >= m_maxChunks) {
         return false;
     }
@@ -224,7 +224,7 @@ bool ChunkedOctreeBuffer::loadChunk(uint32_t chunkIndex, const std::vector<Octre
     return true;
 }
 
-void ChunkedOctreeBuffer::unloadChunk(uint32_t chunkIndex, bool clearMemory) {
+void ChunkedTreeBuffer::unloadChunk(uint32_t chunkIndex, bool clearMemory) {
     if (chunkIndex >= m_maxChunks) {
         return;
     }
@@ -233,7 +233,7 @@ void ChunkedOctreeBuffer::unloadChunk(uint32_t chunkIndex, bool clearMemory) {
 
     if (clearMemory && chunk.nodeCount > 0) {
         // Zero out the chunk's memory
-        std::vector<OctreeNode> zeros(chunk.nodeCount, OctreeNode{});
+        std::vector<TreeNode> zeros(chunk.nodeCount, TreeNode{});
         m_buffer.updateRange(chunk.startIndex, chunk.nodeCount, zeros.data());
     }
 
@@ -241,8 +241,8 @@ void ChunkedOctreeBuffer::unloadChunk(uint32_t chunkIndex, bool clearMemory) {
     chunk.occupied = false;
 }
 
-void ChunkedOctreeBuffer::updateChunkNodes(uint32_t chunkIndex, uint32_t nodeOffset,
-    uint32_t count, const OctreeNode* nodes) {
+void ChunkedTreeBuffer::updateChunkNodes(uint32_t chunkIndex, uint32_t nodeOffset,
+    uint32_t count, const TreeNode* nodes) {
     if (chunkIndex >= m_maxChunks) {
         return;
     }
@@ -260,7 +260,7 @@ void ChunkedOctreeBuffer::updateChunkNodes(uint32_t chunkIndex, uint32_t nodeOff
     chunk.nodeCount = std::max(chunk.nodeCount, nodeOffset + count);
 }
 
-const ChunkedOctreeBuffer::ChunkInfo& ChunkedOctreeBuffer::getChunkInfo(uint32_t chunkIndex) const {
+const ChunkedTreeBuffer::ChunkInfo& ChunkedTreeBuffer::getChunkInfo(uint32_t chunkIndex) const {
     static ChunkInfo invalid = { 0, 0, false };
 
     if (chunkIndex >= m_maxChunks) {
@@ -270,7 +270,7 @@ const ChunkedOctreeBuffer::ChunkInfo& ChunkedOctreeBuffer::getChunkInfo(uint32_t
     return m_chunks[chunkIndex];
 }
 
-void ChunkedOctreeBuffer::destroy() {
+void ChunkedTreeBuffer::destroy() {
     m_buffer.destroy();
     m_chunks.clear();
     m_maxChunks = 0;
