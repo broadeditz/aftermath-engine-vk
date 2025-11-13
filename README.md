@@ -27,7 +27,7 @@ However, "Eldritch Aftermath" and associated branding are protected trademarks u
 
 When distributing modified versions, you must:
 - Clearly indicate it's a modified version
-- Use a different name (e.g., "YourGame Community Edition" or "YourGame Fork")
+- Use a different name (e.g., "Eldritch Aftermath Community Edition" or "Eldritch Aftermath Fork")
 - Not imply it's the official version or endorsed by us
 - Not use our logos, branding materials, or name in a way that causes confusion
 - Optionally: Credit the original project
