@@ -611,7 +611,12 @@ private:
 
         auto currentTime = std::chrono::high_resolution_clock::now();
         float time = std::chrono::duration<float>(currentTime - startTime).count();
-        computeScreen.frameData.update(FrameUniforms{time, 0.0001, 15, 1.5});
+        computeScreen.frameData.update(FrameUniforms{
+            .time = time,
+            .aperture = 0.05,
+            .focusDistance = 15,
+            .fov = 1.5
+        });
 
         device.resetFences(*inFlightFences[currentFrame]);
         commandBuffers[currentFrame].reset();
