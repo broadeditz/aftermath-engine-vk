@@ -1,7 +1,12 @@
 # Aftermath Engine
 
-Aftermath Engine is a highly customized ray marching based 3D rendering engine built with C++ and Vulkan.  
-It is designed to simulate stupendously large and detailed environments using voxel data structures, while delivering truly next-generation visual effects enabled by ray-based rendering.  
+Aftermath Engine is a highly custom ray marching based 3D rendering engine built with C++ and Vulkan.  
+It is designed to simulate stupendously large and detailed destructable environments using voxel data structures, while delivering truly next-generation visual effects enabled by ray-based rendering.  
+
+### Please note:
+This project is still in early development. Many features are incomplete or missing, and there may be bugs and performance issues. Try at your own risk!  
+If you're new to game development, and wondering if this is a good project to learn from, the answer is definitely no. The codebase is complex and not well documented yet, seen as though this my first C++ project.  
+However, if you're experienced with C++ and graphics programming, feel free to explore and contribute!  
 
 ## Features
 - Ray Marching: Utilizes ray marching techniques for rendering complex 3D scenes.
