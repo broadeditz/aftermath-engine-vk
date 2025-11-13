@@ -1,6 +1,5 @@
 module raymarch;
 
-import light;
 import sdf;
 
 public struct raymarchResult {
