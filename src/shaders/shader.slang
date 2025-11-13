@@ -49,6 +49,8 @@ struct RenderUniforms {
     float maxDistance;
     // epsilon is the minimum distance to consider a hit
     float epsilon;
+    // ray samples per pixel
+    int samples;
 }
 
 // Binding 3 set 0
@@ -70,11 +72,17 @@ float hash(float2 p) {
     return frac((p3.x + p3.y) * p3.z);
 }
 
-// Generate random point in unit disk
-float2 randomInUnitDisk(float2 seed) {
-    float angle = hash(seed) * 6.28318530718; // 2 * PI
-    float radius = sqrt(hash(seed + 0.1));
-    return float2(cos(angle), sin(angle)) * radius;
+// Vogel disk sampling - evenly distributed points in a disk
+float2 vogelDiskSample(int sampleIndex, int numSamples, float rotation) {
+    const float goldenAngle = 2.39996323; // 2*PI / golden ratio
+    float r = sqrt(float(sampleIndex) + 0.5) / sqrt(float(numSamples));
+    float theta = float(sampleIndex) * goldenAngle;
+
+    // Rotate the pattern per pixel to break up repetition
+    theta += rotation;
+
+    // TODO: investigate this sneaking suspicion that r messes with the rotation
+    return float2(cos(theta), sin(theta)) * r;
 }
 
 [shader("compute")]
@@ -91,7 +99,7 @@ void computeMain(uint3 dispatchThreadID: SV_DispatchThreadID) {
 
     float aspectRatio = float(width) / float(height);
 
-    int samplesPerPixel = 4;
+    int samplesPerPixel = 5;
 
     float3 colorAccum = float3(0.0, 0.0, 0.0);
 
@@ -111,10 +119,11 @@ void computeMain(uint3 dispatchThreadID: SV_DispatchThreadID) {
     // Focal point at the desired focus distance (this is where all rays should converge)
     float3 focalPoint = cameraPosition + centerDirection * frameUniforms.focusDistance;
 
+    float vogelOffset = hash(float2(pixelCoords) + frameUniforms.time * 100);
+
     for (int i = 0; i < samplesPerPixel; i++) {
         // apply aperture offset to ray origin
-        float2 seed = float2(pixelCoords) + float2(i * 123.45) + frameUniforms.time;
-        float2 apertureOffset = randomInUnitDisk(seed) * frameUniforms.aperture;
+        float2 apertureOffset = vogelDiskSample(i, samplesPerPixel, vogelOffset) * frameUniforms.aperture;
         float3 rayOrigin = cameraPosition + float3(apertureOffset.x, apertureOffset.y, 0.0);
 
         // Final ray direction: from offset origin TO the fixed focal point
