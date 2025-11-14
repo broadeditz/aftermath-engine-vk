@@ -1,6 +1,7 @@
 module raymarch;
 
 import sdf;
+import tree;
 
 public struct raymarchResult {
     public float distance;
@@ -21,7 +22,7 @@ float3 getNormal(float3 pos) {
     );
 }
 
-public raymarchResult raymarch(float3 rayOrigin, float3 rayDirection, int maxSteps, float maxDistance, float epsilon) {
+public raymarchResult raymarch(float3 rayOrigin, float3 rayDirection, int maxSteps, float maxDistance, float epsilon, StructuredBuffer<TreeNode> treeNodes, StructuredBuffer<TreeLeaf> treeLeaves) {
     float totalDistance = 0.0;
     float stepSize = 0.0;
     float3 lastPosition = rayOrigin;
@@ -49,8 +50,15 @@ public raymarchResult raymarch(float3 rayOrigin, float3 rayDirection, int maxSte
 
         float3 currentPosition = lastPosition + lastDirection * stepSize;
 
-        stepSize = sceneSDF(currentPosition);
-        totalDistance += stepSize;
+        TreeLeaf result = treeSDF(currentPosition, treeNodes, treeLeaves);
+
+        stepSize = result.distance;
+        // stepSize = union(sceneSDF(currentPosition), result.distance);
+        // stepSize = result.distance;
+
+        //stepSize = sceneSDF(currentPosition);
+
+        totalDistance += abs(stepSize);
 
         if (stepSize < epsilon) {
             hits++;

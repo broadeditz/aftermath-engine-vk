@@ -29,7 +29,11 @@ public float cylinder(float3 pos, float radius, float height)
 }*/
 
 public float union(float d1, float d2) {
-    return smin(d1, d2, 0.25);
+    return min(d1, d2);
+}
+
+public float smoothUnion(float d1, float d2, float k) {
+    return smin(d1, d2, k);
 }
 
 public float subtract(float d1, float d2) {

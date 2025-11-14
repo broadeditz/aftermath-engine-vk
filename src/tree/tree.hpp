@@ -1,33 +1,18 @@
+#include <vk_mem_alloc.h>
 #include <cstdint>
 #include <vector>
+#include <deque>
+#include "buffer.hpp"
 
-enum class MaterialType : uint8_t {
-    Void = 0,
-    Air = 1,
-    Water = 2,
-    Dirt = 3,
-    Stone = 4,
-    Grass = 5,
-    Sand = 6,
-    Wood = 7,
-    Leaf = 8,
-    Glass = 9,
-    Torch = 10,
-};
-
-// Tree node structure - must match shader definition
-struct TreeNode {
-    uint32_t childPointer; // Pointer to first child, if LEAF_NODE_FLAG is set, it means it's a leaf node, and contains the index for the leaf data.
-};
-
-struct TreeLeaf {
-	float distance; // Distance from block center to nearest surface, can be negative
-    MaterialType material;
-	uint8_t damage; // damage to the block, 0-255
-	uint8_t padding[2]; // Padding for alignment, not needed, but good to be reminded that we can use another 16 bits worth of data here if needed
-};
+#include <iostream>
+#include <iomanip>
+#include <string>
+#include <map>
 
 const uint32_t LEAF_NODE_FLAG = 0x80000000;
+
+const int treeDepth = 5; // Example depth for test tree
+const float baseVoxelSize = 0.25f; // Size of the smallest voxel at the deepest level
 
 struct vec3 {
     float x, y, z;
@@ -44,11 +29,61 @@ public:
 	std::vector<TreeNode> nodes;
 	std::vector<TreeLeaf> leaves;
 
-private:
-    std::vector<nodeToProcess> queue;
+    // GPU buffers
+    TreeNodeBuffer nodeBuffer;
+    TreeLeafBuffer leafBuffer;
+
+    // Initialize buffers with VMA allocator
+    void initBuffers(VmaAllocator allocator) {
+        nodeBuffer.init(allocator);
+        leafBuffer.init(allocator);
+    }
+
+    // Upload current CPU data to GPU
+    void uploadToGPU() {
+        nodeBuffer.create(nodes);
+        leafBuffer.create(leaves);
+    }
+
+    // Update GPU buffers after modifications
+    void updateGPUBuffers() {
+        nodeBuffer.update(nodes);
+        leafBuffer.update(leaves);
+    }
+
+    // Get buffers for binding to descriptors
+    VkBuffer getNodeBuffer() const { return nodeBuffer.getBuffer(); }
+    VkBuffer getLeafBuffer() const { return leafBuffer.getBuffer(); }
+
+    // Cleanup
+    void destroyBuffers() {
+        nodeBuffer.destroy();
+        leafBuffer.destroy();
+    }
 
     void createTestTree();
+private:
+    std::deque<nodeToProcess> queue;
+    std::vector<float> voxelSizesAtDepth;
+
     uint32_t createLeaf(float distance);
     void subdivideNode(uint32_t parentIndex, int parentDepth, vec3 parentPosition);
 	// TODO: store freed indices for reuse
+
+    void printTreeStats();
+    void printTree(uint32_t nodeIndex = 0, int depth = 0, std::string prefix = "", bool isLast = true);
+    void visualizeTreeSlice(int sliceZ = 0);
+    void printLeafDistribution();
+    void countNodesAtDepth(uint32_t nodeIndex, int depth,
+        std::vector<int>& nodesPerLevel,
+        std::vector<int>& leavesPerLevel);
+
+    float getVoxelSizeAtDepth(int depth);
+
+    void initVoxelSizes() {
+        voxelSizesAtDepth.resize(treeDepth + 1);
+        for (int i = 0; i <= treeDepth; i++) {
+            voxelSizesAtDepth[i] = baseVoxelSize * pow(4.0f, treeDepth - i);
+        }
+    }
 };

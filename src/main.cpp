@@ -37,10 +37,10 @@ struct Vertex {
 };
 
 const std::vector<Vertex> vertices = {
-    {{-1.0f, -1.0f}, {0.0f, 0.0f}},
-    {{1.0f, -1.0f},  {1.0f, 0.0f}},
-    {{1.0f, 1.0f},   {1.0f, 1.0f}},
-    {{-1.0f, 1.0f},  {0.0f, 1.0f}}
+    {{-1.0f, -1.0f}, {0.0f, 1.0f}},
+    {{1.0f, -1.0f},  {1.0f, 1.0f}},
+    {{1.0f, 1.0f},   {1.0f, 0.0f}},
+    {{-1.0f, 1.0f},  {0.0f, 0.0f}}
 };
 
 const std::vector<uint16_t> indices = { 0, 1, 2, 2, 3, 0 };
@@ -159,6 +159,7 @@ private:
 		std::cout << "creating command pool" << std::endl;
         createCommandPool();
 		std::cout << "creating compute screen" << std::endl;
+        // TODO: initialTransition on computeScreen
         computeScreen.create(allocator, device, swapChainExtent.width, swapChainExtent.height);
 		std::cout << "creating compute pipeline" << std::endl;
         createComputePipeline();
@@ -234,7 +235,14 @@ private:
 
         presentIndex = physicalDevice.getSurfaceSupportKHR(graphicsIndex, *surface) ? graphicsIndex : graphicsIndex;
 
+        vk::PhysicalDeviceVulkan12Features vulkan12Features{
+            .shaderInt8 = vk::True,
+            .uniformAndStorageBuffer8BitAccess = vk::True,
+            .storageBuffer8BitAccess = vk::True
+        };
+
         vk::PhysicalDeviceVulkan13Features vulkan13Features{
+            .pNext = &vulkan12Features,
             .synchronization2 = vk::True,
             .dynamicRendering = vk::True
         };
@@ -613,7 +621,7 @@ private:
         float time = std::chrono::duration<float>(currentTime - startTime).count();
         computeScreen.frameData.update(FrameUniforms{
             .time = time,
-            .aperture = 0.05,
+            .aperture = 0.005,
             .focusDistance = 15,
             .fov = 1.5
         });

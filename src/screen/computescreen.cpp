@@ -50,10 +50,12 @@ void ComputeToScreen::create(VmaAllocator allocator, const vk::raii::Device& dev
 
     sampler = vk::raii::Sampler(device, samplerInfo);
 
-    treeBuffer.init(allocator);
+    treeManager.initBuffers(allocator);
+    treeManager.createTestTree();
+    treeManager.uploadToGPU();
 
     // 4. Create descriptor set layouts
-    vk::DescriptorSetLayoutBinding computeBindings[2];
+    vk::DescriptorSetLayoutBinding computeBindings[3];
 
     // Binding 3: Tree storage buffer
     computeBindings[0].binding = 3;
@@ -61,14 +63,20 @@ void ComputeToScreen::create(VmaAllocator allocator, const vk::raii::Device& dev
     computeBindings[0].descriptorCount = 1;
     computeBindings[0].stageFlags = vk::ShaderStageFlagBits::eCompute;
 
-    // Binding 2: Storage image
-    computeBindings[1].binding = 2;
-    computeBindings[1].descriptorType = vk::DescriptorType::eStorageImage;
+    computeBindings[1] = {};
+    computeBindings[1].binding = 4;  // Tree leaves
+    computeBindings[1].descriptorType = vk::DescriptorType::eStorageBuffer;
     computeBindings[1].descriptorCount = 1;
     computeBindings[1].stageFlags = vk::ShaderStageFlagBits::eCompute;
 
+    computeBindings[2] = {};
+    computeBindings[2].binding = 2;  // Storage image
+    computeBindings[2].descriptorType = vk::DescriptorType::eStorageImage;
+    computeBindings[2].descriptorCount = 1;
+    computeBindings[2].stageFlags = vk::ShaderStageFlagBits::eCompute;
+
     vk::DescriptorSetLayoutCreateInfo computeLayoutInfo;
-    computeLayoutInfo.bindingCount = 2;
+    computeLayoutInfo.bindingCount = 3;
     computeLayoutInfo.pBindings = computeBindings;
 
     computeLayout = vk::raii::DescriptorSetLayout(device, computeLayoutInfo);
@@ -92,11 +100,11 @@ void ComputeToScreen::create(VmaAllocator allocator, const vk::raii::Device& dev
     graphicsLayout = vk::raii::DescriptorSetLayout(device, graphicsLayoutInfo);
 
     // 5. Create descriptor pool
-    vk::DescriptorPoolSize poolSizes[4];  // CHANGED: from 3 to 4
+    vk::DescriptorPoolSize poolSizes[4];
 
     // compute - storage buffer
     poolSizes[0].type = vk::DescriptorType::eStorageBuffer;
-    poolSizes[0].descriptorCount = 1;
+    poolSizes[0].descriptorCount = 2;
 
     // compute - storage image
     poolSizes[1].type = vk::DescriptorType::eStorageImage;
@@ -132,10 +140,34 @@ void ComputeToScreen::create(VmaAllocator allocator, const vk::raii::Device& dev
     graphicsSet = *graphicsSets[0];
 
     // 7. Update descriptor sets
-    std::vector<vk::WriteDescriptorSet> computeWrites;
+    // Tree buffer descriptor info
+    // Tree nodes buffer
+    VkDescriptorBufferInfo nodesBufferInfo{};
+    nodesBufferInfo.buffer = treeManager.getNodeBuffer();
+    nodesBufferInfo.offset = 0;
+    nodesBufferInfo.range = VK_WHOLE_SIZE;
 
-    // Tree buffer descriptor info (will be updated when tree data is set)
-    // TODO: update this later in setTreeData(), but need to allocate space
+    VkWriteDescriptorSet nodesWrite{};
+    nodesWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    nodesWrite.dstSet = VkDescriptorSet(computeSet);
+    nodesWrite.dstBinding = 3;
+    nodesWrite.descriptorCount = 1;
+    nodesWrite.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    nodesWrite.pBufferInfo = &nodesBufferInfo;
+
+    // Tree leaves buffer
+    VkDescriptorBufferInfo leavesBufferInfo{};
+    leavesBufferInfo.buffer = treeManager.getLeafBuffer();
+    leavesBufferInfo.offset = 0;
+    leavesBufferInfo.range = VK_WHOLE_SIZE;
+
+    VkWriteDescriptorSet leavesWrite{};
+    leavesWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    leavesWrite.dstSet = VkDescriptorSet(computeSet);
+    leavesWrite.dstBinding = 4;
+    leavesWrite.descriptorCount = 1;
+    leavesWrite.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    leavesWrite.pBufferInfo = &leavesBufferInfo;
 
     // Storage image
     vk::DescriptorImageInfo storageImageInfo;
@@ -149,6 +181,8 @@ void ComputeToScreen::create(VmaAllocator allocator, const vk::raii::Device& dev
     storageImageWrite.descriptorType = vk::DescriptorType::eStorageImage;
     storageImageWrite.pImageInfo = &storageImageInfo;
 
+    VkWriteDescriptorSet writes[] = { nodesWrite, leavesWrite };
+    vkUpdateDescriptorSets(view.getDevice(), 2, writes, 0, nullptr);
     device.updateDescriptorSets(storageImageWrite, nullptr);
 
     // Graphics set (combined image sampler)
@@ -199,49 +233,8 @@ void ComputeToScreen::create(VmaAllocator allocator, const vk::raii::Device& dev
     graphicsPipelineLayout = vk::raii::PipelineLayout(device, graphicsPipelineLayoutInfo);
 }
 
-void ComputeToScreen::setTreeData(const std::vector<TreeNode>& treeData) {
-    if (treeData.empty()) {
-        std::cerr << "Warning: Empty tree data" << std::endl;
-        return;
-    }
-
-    std::cout << "Loading tree with " << treeData.size() << " nodes" << std::endl;
-
-    // Create/update tree buffer
-    if (!treeBuffer.create(treeData)) {
-        std::cerr << "Failed to create tree buffer" << std::endl;
-        return;
-    }
-
-    // Update descriptor set with tree buffer
-    VkDescriptorBufferInfo bufferInfo{};
-    bufferInfo.buffer = treeBuffer.getBuffer();
-    bufferInfo.offset = 0;
-    bufferInfo.range = VK_WHOLE_SIZE;
-
-    VkWriteDescriptorSet write{};
-    write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    write.dstSet = VkDescriptorSet(computeSet);
-    write.dstBinding = 3;
-    write.descriptorCount = 1;
-    write.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-    write.pBufferInfo = &bufferInfo;
-
-    vkUpdateDescriptorSets(view.getDevice(), 1, &write, 0, nullptr);
-
-    std::cout << "Tree buffer bound to descriptor set" << std::endl;
-}
-
-void ComputeToScreen::updateTreeNode(uint32_t index, const TreeNode& node) {
-    treeBuffer.updateNode(index, node);
-}
-
-void ComputeToScreen::updateTreeRange(uint32_t startIndex, uint32_t count, const TreeNode* nodes) {
-    treeBuffer.updateRange(startIndex, count, nodes);
-}
-
 void ComputeToScreen::destroy(VmaAllocator allocator) {
-    treeBuffer.destroy();
+    treeManager.destroyBuffers();
 
     // RAII objects will be destroyed automatically
     vmaDestroyImage(allocator, VkImage(image), allocation);

@@ -3,6 +3,7 @@
 #include <vk_mem_alloc.h>
 #include "../uniforms/frame.hpp"
 #include "../tree/buffer.hpp"
+#include "../tree/tree.hpp"
 
 class ComputeToScreen {
 public:
@@ -24,7 +25,7 @@ public:
     vk::raii::PipelineLayout graphicsPipelineLayout = nullptr;
 
     FrameDataManager frameData;
-    TreeBuffer treeBuffer;
+    TreeManager treeManager;
     VmaAllocator vmaAllocator;
 
     uint32_t width, height;
@@ -43,8 +44,4 @@ public:
 
     // Transition back to GENERAL for next frame
     void transitionBack(const vk::raii::CommandBuffer& cmd);
-
-    void setTreeData(const std::vector<TreeNode>& octreeData);
-    void updateTreeNode(uint32_t index, const TreeNode& node);
-    void updateTreeRange(uint32_t startIndex, uint32_t count, const TreeNode* nodes);
 };

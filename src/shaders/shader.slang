@@ -55,7 +55,11 @@ struct RenderUniforms {
 
 // Binding 3 set 0
 [[vk::binding(3, 0)]]
-StructuredBuffer<TreeNode> octreeBuffer;
+StructuredBuffer<TreeNode> treeNodes;
+
+// Binding 4 set 0
+[[vk::binding(4, 0)]]
+StructuredBuffer<TreeLeaf> treeLeaves;
 
 // Binding 2 set 0
 [[vk::binding(2, 0)]]
@@ -99,7 +103,7 @@ void computeMain(uint3 dispatchThreadID: SV_DispatchThreadID) {
 
     float aspectRatio = float(width) / float(height);
 
-    int samplesPerPixel = 5;
+    int samplesPerPixel = 2;
 
     float3 colorAccum = float3(0.0, 0.0, 0.0);
 
@@ -109,7 +113,8 @@ void computeMain(uint3 dispatchThreadID: SV_DispatchThreadID) {
         (float(pixelCoords.y) / float(height) - 0.5) * 2.0
     );
 
-    float3 cameraPosition = float3(0.0, 0.0, frameUniforms.time * 0.4);
+    float3 cameraPosition = float3(0.0, 0.0, 0.0);
+    //float3 cameraPosition = float3(0.0, 0.0, frameUniforms.time * 0.4);
 
     // Point on the image plane (determines FOV)
     float3 imagePoint = float3(uv.x, uv.y, frameUniforms.fov) + cameraPosition;
@@ -129,7 +134,8 @@ void computeMain(uint3 dispatchThreadID: SV_DispatchThreadID) {
         // Final ray direction: from offset origin TO the fixed focal point
         float3 rayDirection = normalize(focalPoint - rayOrigin);
 
-        raymarchResult result = raymarch(rayOrigin, rayDirection, 200, 100000.0, 0.001);
+        //raymarchResult result = raymarch(rayOrigin, rayDirection, 200, 100000.0, -0.5, treeNodes, treeLeaves);
+        raymarchResult result = raymarch(rayOrigin, rayDirection, 200, 100000.0, 0.001, treeNodes, treeLeaves);
 
         if (result.hits > 0) {
             float smoothSteps = float(result.steps) + result.lastStepSize / 0.01;
