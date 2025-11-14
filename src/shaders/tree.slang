@@ -15,6 +15,7 @@ public struct TreeLeaf {
 static const uint LEAF_FLAG = 0x80000000;
 
 static const uint treeDepth = 3; // Max depth of the tree, before arriving at voxel resolution, directly determines max render distance.
+static const float voxelSize = 1.0; // resolution of smallest voxel at the deepest point of the tree.
 
 enum MaterialType :uint8_t {
     Void = 0,
@@ -36,15 +37,46 @@ public struct TreeSDFResult {
 
 StructuredBuffer<TreeNode> treeNodes;
 StructuredBuffer<TreeLeaf> treeLeaves;
+static const float3 rootOrigin = { 0, 0, 0 };
 
 public TreeLeaf treeSDF(float3 worldPos) {
     TreeNode currentNode = treeNodes[0];
 
-    // TODO: implement loop
+    float3 nodeCenter = rootOrigin;
 
-    if ((currentNode.childPointer & LEAF_FLAG) != 0) {
-        return treeLeaves[currentNode.childPointer - LEAF_FLAG];
+    float nodeSize = pow(4, float(treeDepth) * voxelSize);
+
+    for (uint depth = 0; depth < treeDepth; depth++) {
+        if (bool(currentNode.childPointer & LEAF_FLAG)) {
+            uint leafIndex = currentNode.childPointer & ~LEAF_FLAG;
+            return treeLeaves[leafIndex];
+        }
+
+        nodeSize *= 0.25; // 4x4x4 tree matrix means 1/4th the voxel edge size for every depth step
+
+        float3 relativePos = worldPos - nodeCenter;
+
+        // map position to 4x4x4 matrix, so we know which child to traverse to
+        uint xIndex = clamp(uint(floor((relativePos.x / nodeSize) + 1.5)), 0, 3);
+        uint yIndex = clamp(uint(floor((relativePos.y / nodeSize) + 1.5)), 0, 3);
+        uint zIndex = clamp(uint(floor((relativePos.z / nodeSize) + 1.5)), 0, 3);
+
+        uint childIndex = zIndex * 16 + yIndex * 4 + xIndex;
+
+        // calculate child node's center point
+        nodeCenter.x += (xIndex - 1.5) * nodeSize;
+        nodeCenter.y += (yIndex - 1.5) * nodeSize;
+        nodeCenter.z += (zIndex - 1.5) * nodeSize;
+
+        uint childPointer = currentNode.childPointer + childIndex;
+        currentNode = treeNodes[childPointer];
     }
 
-    return treeLeaves[currentNode.childPointer];
+    // Fallback: return default leaf
+    TreeLeaf defaultLeaf;
+    defaultLeaf.distance = 10000000.0; // huge distance so max ray distance instantly gets triggered & ray marching stops.
+    defaultLeaf.material = MaterialType::Void;
+    defaultLeaf.damage = 0;
+    return defaultLeaf;
+    // TODO: implement traversal
 }

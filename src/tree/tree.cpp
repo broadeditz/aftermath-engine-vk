@@ -47,14 +47,25 @@ vec3 getChunkPosition(uint32_t chunkIndex, float voxelSize, vec3 parentPosition)
 	return result;
 }
 
+float length(vec3 pos) {
+	return sqrt(pos.x * pos.x + pos.y * pos.y + pos.z * pos.z);
+}
+
+vec3 sub(vec3 pos, vec3 move) {
+	return { pos.x - move.x, pos.y - move.y, pos.z - move.z };
+}
+
 float sampleDistanceAt(vec3 position) {
 	// Simple test example: distance increases with height, flat floor at -2 y
 	return position.y + 2;
+
+	// simple sphere
+	//return length(sub(position, vec3{0, 0, -5})) - 5;
 }
 
 uint32_t TreeManager::createLeaf(float distance) {
 	MaterialType material;
-	if (distance < 0.1) {
+	if (distance < 0.01) {
 		material = MaterialType::Grass;
 	}
 
@@ -82,7 +93,7 @@ void TreeManager::subdivideNode(
 	if (abs(distance) > voxelSize) {
 		uint32_t leafPointer = createLeaf(distance);
 
-		nodes[parentIndex].childPointer = leafPointer & LEAF_NODE_FLAG;
+		nodes[parentIndex].childPointer = leafPointer | LEAF_NODE_FLAG;
 
 		return;
 	}
@@ -91,13 +102,16 @@ void TreeManager::subdivideNode(
 	if (depth == treeDepth) {
 		uint32_t leafPointer = createLeaf(distance);
 
-		nodes[parentIndex].childPointer = leafPointer & LEAF_NODE_FLAG;
+		nodes[parentIndex].childPointer = leafPointer | LEAF_NODE_FLAG;
 
 		return;
 	}
 
-	uint32_t childPointer = nodes.size();
-	nodes[parentIndex].childPointer = childPointer;
+	// set pointer of parent to the first child -- which hasn't been created yet at this point(!)
+	if (nodes[parentIndex].childPointer == 0) {
+		uint32_t childPointer = nodes.size();
+		nodes[parentIndex].childPointer = childPointer;
+	}
 
 	voxelSize = getVoxelSizeAtDepth(depth);
 
@@ -133,5 +147,23 @@ void TreeManager::createTestTree() {
 		.z = 0.0,
 	};
 
-	// TODO: main loop that samples every node, and creates leaf if the distance at its center is larger than the size of the node as a voxel
+	// Create 64 children (4󫶘 subdivision)
+	for (uint32_t i = 0; i < 64; i++) {
+		vec3 childPosition = getChunkPosition(i, voxelSize, rootPosition);
+
+		TreeNode childNode = {};
+		childNode.childPointer = 0;
+
+		nodes.push_back(childNode);
+
+		// Add child to queue for further processing
+		queue.push_back(nodeToProcess{ 0, 1, childPosition });
+	}
+
+	while (!queue.empty()) {
+		nodeToProcess current = queue.front();
+		queue.erase(queue.begin());
+
+		subdivideNode(current.parentNodeIndex, current.depth, current.parentPosition);
+	}
 }
