@@ -16,7 +16,9 @@ However, if you're experienced with C++ and graphics programming, feel free to e
 ## TODO/bug list
 
 - [ ] Implement dynamic lighting and shadows.
-- [ ] Implement SVO (Sparse Voxel Octree) support for efficient voxel data management.
+- [x] Implement sparse signed distance field 64tree support for efficient voxel data management. (Early, naive, implementation done)
+	- [ ] Implement dynamic voxel destruction
+	- [ ] Implement dynamic voxel construction
 - [ ] Add foveated rendering for performance optimization, focussing compute on the center of the screen.
 - [ ] Fix destructors of uniform buffer classes to prevent memory leaks.
 
