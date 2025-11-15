@@ -50,17 +50,14 @@ public raymarchResult raymarch(float3 rayOrigin, float3 rayDirection, int maxSte
 
         float3 currentPosition = lastPosition + lastDirection * stepSize;
 
-        TreeLeaf result = treeSDF(currentPosition, treeNodes, treeLeaves);
+        TreeSDFResult result = treeSDF(currentPosition, treeNodes, treeLeaves);
 
-        stepSize = result.distance;
-        // stepSize = union(sceneSDF(currentPosition), result.distance);
-        // stepSize = result.distance;
+        //stepSize = result.voxel.distance;
+        stepSize = smoothUnion(sceneSDF(currentPosition), result.voxel.distance, 0.4) - epsilon;
 
         //stepSize = sceneSDF(currentPosition);
 
-        totalDistance += abs(stepSize);
-
-        if (stepSize < epsilon) {
+        if (stepSize < 0.001) {
             hits++;
             break;
 
@@ -70,6 +67,9 @@ public raymarchResult raymarch(float3 rayOrigin, float3 rayDirection, int maxSte
             //lastDirection = reflect(lastDirection, surfaceNormal);
             //break;
         }
+
+        totalDistance += stepSize;
+
         if (totalDistance >= maxDistance) {
             break;
         }
@@ -85,14 +85,6 @@ public raymarchResult raymarch(float3 rayOrigin, float3 rayDirection, int maxSte
 }
 
 float sceneSDF(float3 pos) {
-    return repeatingSphere(pos - float3(3.5,3.5,0), 1, float3(7, 7, 7));
+    return sphere(pos - float3(3.5,3.5,7), 1);
+    //return repeatingSphere(pos - float3(3.5,3.5,0), 1, float3(7, 7, 7));
 }
-
-/*float sceneSDF(float3 pos) {
-    return subtract(cylinder(pos, 50, 500000), union(repeatingSphere(pos, 1, float3(7, 7, 7)), cube(pos - float3(-1, 0, 0.5), 0.8)));
-}
-
-float sceneSDF(float3 pos) {
-    return subtract(sphere(pos - float3(0,0.5,0), 1.2), union(repeatingSphere(pos, 1, float3(7, 7, 7)), cube(pos - float3(-1, 0 , 0.5), 0.8)));
-}
-*/

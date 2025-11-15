@@ -622,7 +622,7 @@ private:
         computeScreen.frameData.update(FrameUniforms{
             .time = time,
             .aperture = 0.005,
-            .focusDistance = 15,
+            .focusDistance = 3.5,
             .fov = 1.5
         });
 

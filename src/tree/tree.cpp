@@ -82,8 +82,11 @@ float sampleLipschitzBoundAt(vec3 position, float voxelSize) {
     float halfDiagonal = voxelSize * 1.732050808f * 0.5f;
     float conservativeMagnitude = abs(centerDistance) - halfDiagonal;
 
-    // Preserve the sign from center sample
-    return (centerDistance >= 0 ? 1.0f : -1.0f) * conservativeMagnitude;
+    // Preserve the sign from center sample.
+    // The minStep is kind of a magic number here that I'm not entirely sure why it makes the voxel marching work just right.
+    // I'm also not sure if it's the optimal value at 0.05
+    const float minStep = 0.05;
+    return (centerDistance >= 0 ? 1.0f : -1.0f) * fmax(conservativeMagnitude, voxelSize * minStep);
 }
 
 uint32_t TreeManager::createLeaf(float distance) {

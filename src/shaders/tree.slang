@@ -18,6 +18,31 @@ static const uint LEAF_FLAG = 0x80000000;
 static const uint treeDepth = 5; // Max depth of the tree, before arriving at voxel resolution, directly determines max render distance.
 static const float voxelSize = 0.25; // resolution of smallest voxel at the deepest point of the tree.
 
+// Use integer to represent voxel size
+// VOXEL_SIZE_NUM = numerator, VOXEL_SIZE_DENOM = denominator
+// e.g., 0.25 = 1/4, so NUM=1, DENOM=4
+public struct TreeConstants<let DEPTH : int, let VOXEL_SIZE_NUM : int, let VOXEL_SIZE_DENOM : int> {
+    static const float voxelSize = float(VOXEL_SIZE_NUM) / float(VOXEL_SIZE_DENOM);
+    static const float rootNodeSize = voxelSize * pow(4.0, float(DEPTH));
+    static const float sqrtThree = 1.732050808;
+    static const float halfSqrtThree = 0.866025404;
+    static const float voxelSafetyMargin = voxelSize * 0.1;
+
+    public static float getNodeSize(uint depth) {
+        return voxelSize * pow(4.0, float(DEPTH - depth));
+    }
+
+    public static float getInvNodeSize(uint depth) {
+        return 1.0 / getNodeSize(depth);
+    }
+
+    public static float getHalfDiagonal(uint depth) {
+        return getNodeSize(depth) * halfSqrtThree;
+    }
+}
+
+public typealias treeConstants = TreeConstants<treeDepth, 1, 4>;
+
 public enum MaterialType : uint8_t {
     Void = 0,
     Air = 1, // unused for now, void is air
@@ -32,18 +57,19 @@ public enum MaterialType : uint8_t {
 }
 
 public struct TreeSDFResult {
-    TreeNode voxel;
-    float distance;
+    public TreeLeaf voxel;
+    public uint depth;
+    public float voxelSize;
 }
 
 static const float3 rootOrigin = { 0, 0, 0 };
 
-public TreeLeaf treeSDF(float3 worldPos, StructuredBuffer<TreeNode> treeNodes, StructuredBuffer<TreeLeaf> treeLeaves) {
+public TreeSDFResult treeSDF(float3 worldPos, StructuredBuffer<TreeNode> treeNodes, StructuredBuffer<TreeLeaf> treeLeaves) {
     TreeNode currentNode = treeNodes[0];
 
     float3 nodeCenter = rootOrigin;
 
-    float nodeSize = pow(4, float(treeDepth)) * voxelSize;
+    float nodeSize = treeConstants::rootNodeSize;
 
     for (uint depth = 0; depth <= treeDepth; depth++) {
         if (bool(currentNode.childPointer & LEAF_FLAG)) {
@@ -55,32 +81,40 @@ public TreeLeaf treeSDF(float3 worldPos, StructuredBuffer<TreeNode> treeNodes, S
             //leaf.distance = leaf.distance - length(offset);
 
             // Apply conservative bound while preserving sign
-            float halfDiagonal = nodeSize * sqrt(3.0) * 0.5;
-            float sign = leaf.distance >= 0 ? 1.0 : -1.0;
-            float conservativeMagnitude = abs(leaf.distance) - halfDiagonal;
+            //float halfDiagonal = constants::getHalfDiagonal(depth);
+            //float sign = leaf.distance >= 0 ? 1.0 : -1.0;
+            //float conservativeMagnitude = abs(leaf.distance) - halfDiagonal;
 
             // Clamp magnitude to ensure forward progress, keep sign
-            leaf.distance = sign * max(conservativeMagnitude, voxelSize * 0.1);
+            //leaf.distance = sign * max(conservativeMagnitude, voxelSize * 0.1);
 
-            return leaf;
+            TreeSDFResult result;
+            result.voxel = leaf;
+            result.depth = depth;
+            result.voxelSize = voxelSize;
+            return result;
         }
 
         float3 relativePos = worldPos - nodeCenter;
 
+        nodeSize = treeConstants::getNodeSize( depth + 1); // 4x4x4 tree matrix means 1/4th the voxel edge size for every depth step
+        float invNodeSize = treeConstants::getInvNodeSize(depth + 1);
 
-        nodeSize *= 0.25; // 4x4x4 tree matrix means 1/4th the voxel edge size for every depth step
         // map position to 4x4x4 matrix, so we know which child to traverse to
-        uint xIndex = clamp(uint(floor((relativePos.x / nodeSize) + 2.0)), 0, 3);
-        uint yIndex = clamp(uint(floor((relativePos.y / nodeSize) + 2.0)), 0, 3);
-        uint zIndex = clamp(uint(floor((relativePos.z / nodeSize) + 2.0)), 0, 3);
+        // using inverted node size, because multiplication is cheaper than division
+        uint xIndex = clamp(uint(floor((relativePos.x * invNodeSize) + 2.0)), 0, 3);
+        uint yIndex = clamp(uint(floor((relativePos.y * invNodeSize) + 2.0)), 0, 3);
+        uint zIndex = clamp(uint(floor((relativePos.z * invNodeSize) + 2.0)), 0, 3);
 
-        uint childIndex = zIndex * 16 + yIndex * 4 + xIndex;
+        uint childIndex = (zIndex << 4) + (yIndex << 2) + xIndex;
 
+        // precomputed voxel offsets
+        static const float offsets[4] = { -1.5, -0.5, 0.5, 1.5 };
 
         // calculate child node's center point
-        nodeCenter.x += (xIndex - 1.5) * nodeSize;
-        nodeCenter.y += (yIndex - 1.5) * nodeSize;
-        nodeCenter.z += (zIndex - 1.5) * nodeSize;
+        nodeCenter.x += offsets[xIndex] * nodeSize;
+        nodeCenter.y += offsets[yIndex] * nodeSize;
+        nodeCenter.z += offsets[zIndex] * nodeSize;
 
         uint childPointer = currentNode.childPointer + childIndex;
         currentNode = treeNodes[childPointer];
@@ -91,5 +125,9 @@ public TreeLeaf treeSDF(float3 worldPos, StructuredBuffer<TreeNode> treeNodes, S
     defaultLeaf.distance = 10000000.0; // huge distance so max ray distance instantly gets triggered & ray marching stops.
     defaultLeaf.material = MaterialType::Void;
     defaultLeaf.damage = 0;
-    return defaultLeaf;
+
+    TreeSDFResult result;
+    result.voxel = defaultLeaf;
+    result.depth = 0;
+    return result;
 }
