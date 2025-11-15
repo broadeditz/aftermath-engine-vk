@@ -9,8 +9,6 @@ float TreeManager::getVoxelSizeAtDepth(int depth) {
 // Index 0-3 row 0 of layer 0
 // Index 4-7 row 1 of layer 0
 // ...
-
-// This function is definitely wrong
 vec3 getChunkPosition2(uint32_t chunkIndex, float voxelSize, vec3 parentPosition) {
 	// Validate input
 	if (chunkIndex >= 64) {
@@ -147,6 +145,7 @@ void TreeManager::subdivideNode(
 		return;
 	}
 
+    // TODO: precompute
     int LOD = calculateLOD(treeDepth, distance, 64);
 
 	// create voxel leaf if at smallest possible voxel resolution

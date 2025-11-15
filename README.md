@@ -1,7 +1,7 @@
 # Aftermath Engine
 
 Aftermath Engine is a highly custom ray marching based 3D rendering engine built with C++ and Vulkan.  
-It is designed to simulate stupendously large and detailed destructable environments using voxel SDF data structures, while delivering truly next-generation visual effects enabled by ray-based rendering.  
+It is designed to simulate stupendously large and detailed destructable environments using voxel SDF data structures, while delivering truly next-generation visual effects enabled by the fully ray marched renderer.  
 
 ### Please note:
 This project is still in early development. Many features are incomplete or missing, and there may be bugs and performance issues. Try at your own risk!  
