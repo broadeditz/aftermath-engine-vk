@@ -5,7 +5,7 @@ It is designed to simulate stupendously large and detailed destructable environm
 
 ### Please note:
 This project is still in early development. Many features are incomplete or missing, and there may be bugs and performance issues. Try at your own risk!  
-If you're new to game development, and wondering if this is a good project to learn from, the answer is definitely no. The codebase is complex and not well documented yet, seen as though this my first C++ project.  
+If you're new to game development, and wondering if this is a good project to learn from, the answer is definitely no. The codebase is not well documented yet.  
 Especially the `main.cpp` is messy, because I use it like a sketchpad, before extracting functionality into their own files.  
 However, if you're experienced with C++ and graphics programming, feel free to explore and contribute!  
 
