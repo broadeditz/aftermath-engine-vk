@@ -63,6 +63,21 @@ float length(vec3 pos) {
 	return sqrt(pos.x * pos.x + pos.y * pos.y + pos.z * pos.z);
 }
 
+int calculateLOD(int treeDepth, float distance, float lengthThreshold) {
+    int LOD = treeDepth;
+
+    // Reduce LOD by 1 for each doubling of lengthThreshold
+    if (distance > lengthThreshold) {
+        int reductionSteps = static_cast<int>(log2(distance / lengthThreshold));
+        LOD -= reductionSteps;
+    }
+
+    // Optional: clamp LOD to prevent it from going below 0
+    if (LOD < 0) LOD = 0;
+
+    return LOD;
+}
+
 vec3 sub(vec3 pos, vec3 move) {
 	return { pos.x - move.x, pos.y - move.y, pos.z - move.z };
 }
@@ -118,7 +133,12 @@ void TreeManager::subdivideNode(
 	float distance = sampleLipschitzBoundAt(parentPosition, voxelSize);
 
 	// create sparsity leaf if the nearest surface is further than the size of the node
-    float halfDiagonal = voxelSize * 1.732050808f * 0.5f;
+    float halfDiagonal = voxelSize * 1.732050808f * 0.25f;
+    //if (depth == 1) {
+        //std::cout << "index: " << parentIndex << std::endl;
+        //std::cout << halfDiagonal << " - " << distance << std::endl;
+    //}
+
 	if (abs(distance) > halfDiagonal) {
 		uint32_t leafPointer = createLeaf(distance);
 
@@ -127,11 +147,10 @@ void TreeManager::subdivideNode(
 		return;
 	}
 
-    //float nodeDiagonal = voxelSize * sqrt(3.0f);
-    //float conservativeDistance = abs(distance) - nodeDiagonal;
+    int LOD = calculateLOD(treeDepth, distance, 64);
 
 	// create voxel leaf if at smallest possible voxel resolution
-	if (depth == treeDepth) {
+    if (depth >= LOD) {
 		uint32_t leafPointer = createLeaf(distance);
 
 		nodes[parentIndex].childPointer = leafPointer | LEAF_NODE_FLAG;
