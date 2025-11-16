@@ -11,7 +11,7 @@
 
 const uint32_t LEAF_NODE_FLAG = 0x80000000;
 
-const int treeDepth = 5; // Example depth for test tree
+const int treeDepth = 9; // Example depth for test tree
 const float baseVoxelSize = 0.25f; // Size of the smallest voxel at the deepest level
 
 struct vec3 {
@@ -24,6 +24,10 @@ struct nodeToProcess {
     vec3 parentPosition;
 };
 
+vec3 getChunkPosition(uint32_t chunkIndex, float voxelSize, vec3 parentPosition);
+int calculateLOD(int treeDepth, float distance, float lengthThreshold);
+float sampleDistanceAt(vec3 position);
+
 class TreeManager {
 public:
 	std::vector<TreeNode> nodes;
@@ -34,9 +38,9 @@ public:
     TreeLeafBuffer leafBuffer;
 
     // Initialize buffers with VMA allocator
-    void initBuffers(VmaAllocator allocator) {
-        nodeBuffer.init(allocator);
-        leafBuffer.init(allocator);
+    void initBuffers(VmaAllocator allocator, VkDevice device, uint32_t queueFamilyIndex) {
+        nodeBuffer.init(allocator, device, queueFamilyIndex);
+        leafBuffer.init(allocator, device, queueFamilyIndex);
     }
 
     // Upload current CPU data to GPU

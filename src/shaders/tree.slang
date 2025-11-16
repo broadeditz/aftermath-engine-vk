@@ -15,7 +15,7 @@ public struct TreeLeaf {
 
 static const uint LEAF_FLAG = 0x80000000;
 
-static const uint treeDepth = 5; // Max depth of the tree, before arriving at voxel resolution, directly determines max render distance.
+static const uint treeDepth = 9; // Max depth of the tree, before arriving at voxel resolution, directly determines max render distance.
 static const float voxelSize = 0.25; // resolution of smallest voxel at the deepest point of the tree.
 
 // Use integer to represent voxel size
@@ -77,7 +77,7 @@ public TreeSDFResult treeSDF(float3 worldPos, StructuredBuffer<TreeNode> treeNod
             TreeLeaf leaf = treeLeaves[leafIndex];
 
             // adjust distance based on offset from center of the node
-            //float3 offset = abs(worldPos - nodeCenter);
+            //float3 offset = worldPos - nodeCenter;
             //leaf.distance = leaf.distance - length(offset);
 
             // Apply conservative bound while preserving sign

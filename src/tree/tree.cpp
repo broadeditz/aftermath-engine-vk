@@ -1,5 +1,22 @@
 ﻿#include "tree.hpp"
 
+float length(vec3 pos) {
+    return sqrt(pos.x * pos.x + pos.y * pos.y + pos.z * pos.z);
+}
+
+vec3 sub(vec3 pos, vec3 move) {
+    return { pos.x - move.x, pos.y - move.y, pos.z - move.z };
+}
+
+float sampleDistanceAt(vec3 position) {
+    // Simple test example: distance increases with height, flat floor at -2 y
+    return position.y + 2;
+
+    // simple sphere
+    return length(sub(position, vec3{0, 0, 10})) - 5;
+}
+
+
 float TreeManager::getVoxelSizeAtDepth(int depth) {
 	return voxelSizesAtDepth[depth];
 }
@@ -57,10 +74,7 @@ vec3 getChunkPosition(uint32_t chunkIndex, float voxelSize, vec3 parentPosition)
     };
 }
 
-float length(vec3 pos) {
-	return sqrt(pos.x * pos.x + pos.y * pos.y + pos.z * pos.z);
-}
-
+// TODO: precompute
 int calculateLOD(int treeDepth, float distance, float lengthThreshold) {
     int LOD = treeDepth;
 
@@ -73,19 +87,7 @@ int calculateLOD(int treeDepth, float distance, float lengthThreshold) {
     // Optional: clamp LOD to prevent it from going below 0
     if (LOD < 0) LOD = 0;
 
-    return LOD;
-}
-
-vec3 sub(vec3 pos, vec3 move) {
-	return { pos.x - move.x, pos.y - move.y, pos.z - move.z };
-}
-
-float sampleDistanceAt(vec3 position) {
-	// Simple test example: distance increases with height, flat floor at -2 y
-	//return position.y + 5;
-
-	// simple sphere
-	return length(sub(position, vec3{0, 0, 10})) - 5;
+    return (LOD > 3) ? LOD : 3;
 }
 
 float sampleLipschitzBoundAt(vec3 position, float voxelSize) {
@@ -98,7 +100,7 @@ float sampleLipschitzBoundAt(vec3 position, float voxelSize) {
     // Preserve the sign from center sample.
     // The minStep is kind of a magic number here that I'm not entirely sure why it makes the voxel marching work just right.
     // I'm also not sure if it's the optimal value at 0.05
-    const float minStep = 0.05;
+    const float minStep = 0.33;
     return (centerDistance >= 0 ? 1.0f : -1.0f) * fmax(conservativeMagnitude, voxelSize * minStep);
 }
 
@@ -139,17 +141,27 @@ void TreeManager::subdivideNode(
 
 	if (abs(distance) > halfDiagonal) {
 		uint32_t leafPointer = createLeaf(distance);
+		//uint32_t leafPointer = createLeaf(sampleDistanceAt(parentPosition));
 
 		nodes[parentIndex].childPointer = leafPointer | LEAF_NODE_FLAG;
 
 		return;
 	}
 
-    // TODO: precompute
-    int LOD = calculateLOD(treeDepth, distance, 64);
+    // TODO: precompute LOD for distance value as much as possible,
+    // also, make it use actual camera position
+    float distanceFromCamera = length(parentPosition);
+    int LOD = calculateLOD(treeDepth, distanceFromCamera, 64);
 
 	// create voxel leaf if at smallest possible voxel resolution
     if (depth >= LOD) {
+        // We need this to prevent too big steps when the camera is close to the world plane
+        // while not taking too small steps to reach further out terrain.
+        if (distanceFromCamera > 16 && depth == treeDepth) {
+            // sample real distance for bigger steps further from the camera
+            distance = sampleDistanceAt(parentPosition);
+        }
+
 		uint32_t leafPointer = createLeaf(distance);
 
 		nodes[parentIndex].childPointer = leafPointer | LEAF_NODE_FLAG;
@@ -157,11 +169,9 @@ void TreeManager::subdivideNode(
 		return;
 	}
 
-	// set pointer of parent to the first child -- which hasn't been created yet at this point(!)
-	if (nodes[parentIndex].childPointer == 0) {
-		uint32_t childPointer = nodes.size();
-		nodes[parentIndex].childPointer = childPointer;
-	}
+	// set pointer of node to the first child -- which hasn't been created yet at this point(!)
+	uint32_t childPointer = nodes.size();
+	nodes[parentIndex].childPointer = childPointer;
 
 	voxelSize = getVoxelSizeAtDepth(depth+1);
 
@@ -199,26 +209,32 @@ void TreeManager::createTestTree() {
 		.z = 0.0,
 	};
 
+    // Reserve space for all 64 root children first
+    uint32_t firstChildIndex = nodes.size();
+    for (uint32_t i = 0; i < 64; i++) {
+        TreeNode childNode = {};
+        childNode.childPointer = 0;
+        nodes.push_back(childNode);
+    }
+
 	// Create 64 children (4×4×4 subdivision)
 	for (uint32_t i = 0; i < 64; i++) {
 		vec3 childPosition = getChunkPosition(i, voxelSize, rootPosition);
 
-		TreeNode childNode = {};
-		childNode.childPointer = 0;
-
-        uint32_t childIndex = nodes.size();
-		nodes.push_back(childNode);
+        uint32_t childIndex = firstChildIndex + i;
 
 		// Add child to queue for further processing
 		queue.push_back(nodeToProcess{ childIndex, 1, childPosition });
+
+	    while (!queue.empty()) {
+            nodeToProcess current = std::move(queue.front());
+		    queue.pop_front();
+
+		    subdivideNode(current.parentNodeIndex, current.depth, current.parentPosition);
+	    }
 	}
 
-	while (!queue.empty()) {
-		nodeToProcess current = queue.front();
-		queue.pop_front();
-
-		subdivideNode(current.parentNodeIndex, current.depth, current.parentPosition);
-	}
+    queue.shrink_to_fit();
 
     printTreeStats();
     visualizeTreeSlice();
