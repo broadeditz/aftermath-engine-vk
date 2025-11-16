@@ -1,10 +1,9 @@
 #include <iostream>
 #include "computescreen.hpp"
 
-void ComputeToScreen::create(VmaAllocator allocator, const vk::raii::Device& device, uint32_t w, uint32_t h) {
+void ComputeToScreen::createImage(VmaAllocator allocator, const vk::raii::Device& device, uint32_t w, uint32_t h) {
     width = w;
     height = h;
-    vmaAllocator = allocator;
 
     std::cout << "Creating compute image: " << width << "x" << height << std::endl;
 
@@ -49,8 +48,53 @@ void ComputeToScreen::create(VmaAllocator allocator, const vk::raii::Device& dev
     samplerInfo.addressModeW = vk::SamplerAddressMode::eClampToEdge;
 
     sampler = vk::raii::Sampler(device, samplerInfo);
+}
 
-    treeManager.initBuffers(allocator);
+void ComputeToScreen::updateImageDescriptors(const vk::raii::Device& device) {
+    // Update compute set - storage image
+    vk::DescriptorImageInfo storageImageInfo;
+    storageImageInfo.imageView = *view;
+    storageImageInfo.imageLayout = vk::ImageLayout::eGeneral;
+
+    vk::WriteDescriptorSet storageImageWrite;
+    storageImageWrite.dstSet = computeSet;
+    storageImageWrite.dstBinding = 2;
+    storageImageWrite.descriptorCount = 1;
+    storageImageWrite.descriptorType = vk::DescriptorType::eStorageImage;
+    storageImageWrite.pImageInfo = &storageImageInfo;
+
+    device.updateDescriptorSets(storageImageWrite, nullptr);
+
+    // Update graphics set - sampled image and sampler
+    vk::DescriptorImageInfo sampledImageInfo;
+    sampledImageInfo.imageView = *view;
+    sampledImageInfo.imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
+
+    vk::DescriptorImageInfo samplerInfo;
+    samplerInfo.sampler = *sampler;
+
+    vk::WriteDescriptorSet graphicsWrites[2];
+    graphicsWrites[0].dstSet = graphicsSet;
+    graphicsWrites[0].dstBinding = 0;
+    graphicsWrites[0].descriptorCount = 1;
+    graphicsWrites[0].descriptorType = vk::DescriptorType::eSampledImage;
+    graphicsWrites[0].pImageInfo = &sampledImageInfo;
+
+    graphicsWrites[1].dstSet = graphicsSet;
+    graphicsWrites[1].dstBinding = 1;
+    graphicsWrites[1].descriptorCount = 1;
+    graphicsWrites[1].descriptorType = vk::DescriptorType::eSampler;
+    graphicsWrites[1].pImageInfo = &samplerInfo;
+
+    device.updateDescriptorSets(graphicsWrites, nullptr);
+}
+
+void ComputeToScreen::create(VmaAllocator allocator, const vk::raii::Device& device, uint32_t queueFamilyIndex, uint32_t w, uint32_t h) {
+    vmaAllocator = allocator;
+
+    createImage(allocator, device, w, h);
+
+    treeManager.initBuffers(allocator, *device, queueFamilyIndex);
     treeManager.createTestTree();
     treeManager.uploadToGPU();
 
@@ -183,30 +227,9 @@ void ComputeToScreen::create(VmaAllocator allocator, const vk::raii::Device& dev
 
     VkWriteDescriptorSet writes[] = { nodesWrite, leavesWrite };
     vkUpdateDescriptorSets(view.getDevice(), 2, writes, 0, nullptr);
-    device.updateDescriptorSets(storageImageWrite, nullptr);
 
-    // Graphics set (combined image sampler)
-    vk::DescriptorImageInfo sampledImageInfo;
-    sampledImageInfo.imageView = *view;
-    sampledImageInfo.imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
-
-    vk::WriteDescriptorSet graphicsWrites[2];
-    graphicsWrites[0].dstSet = graphicsSet;
-    graphicsWrites[0].dstBinding = 0;
-    graphicsWrites[0].descriptorCount = 1;
-    graphicsWrites[0].descriptorType = vk::DescriptorType::eSampledImage;
-    graphicsWrites[0].pImageInfo = &sampledImageInfo;
-
-    vk::DescriptorImageInfo samplerWritesInfo;
-    samplerWritesInfo.sampler = *sampler;
-
-    graphicsWrites[1].dstSet = graphicsSet;
-    graphicsWrites[1].dstBinding = 1;
-    graphicsWrites[1].descriptorCount = 1;
-    graphicsWrites[1].descriptorType = vk::DescriptorType::eSampler;
-    graphicsWrites[1].pImageInfo = &samplerWritesInfo;
-
-    device.updateDescriptorSets(graphicsWrites, nullptr);
+    // Update image and sampler descriptors
+    updateImageDescriptors(device);
 
     frameData.create(device, allocator);
     descriptorSets = {
@@ -239,6 +262,13 @@ void ComputeToScreen::destroy(VmaAllocator allocator) {
     // RAII objects will be destroyed automatically
     vmaDestroyImage(allocator, VkImage(image), allocation);
     frameData.destroy();
+}
+
+void ComputeToScreen::resize(VmaAllocator allocator, const vk::raii::Device& device, uint32_t queueFamilyIndex, uint32_t w, uint32_t h) {
+    vmaDestroyImage(allocator, VkImage(image), allocation);
+
+    createImage(allocator, device, w, h);
+    updateImageDescriptors(device);
 }
 
 void ComputeToScreen::initialTransition(const vk::raii::CommandBuffer& cmd) {

@@ -30,8 +30,12 @@ public:
 
     uint32_t width, height;
 
-    void create(VmaAllocator allocator, const vk::raii::Device& device, uint32_t width, uint32_t height);
+    void create(VmaAllocator allocator, const vk::raii::Device& device, uint32_t queueFamilyIndex, uint32_t width, uint32_t height);
+    void createImage(VmaAllocator allocator, const vk::raii::Device& device, uint32_t w, uint32_t h);
+    void updateImageDescriptors(const vk::raii::Device& device);
     void destroy(VmaAllocator allocator);
+
+    void resize(VmaAllocator allocator, const vk::raii::Device& device, uint32_t queueFamilyIndex, uint32_t width, uint32_t height);
 
     // Helper to transition image for first use
     void initialTransition(const vk::raii::CommandBuffer& cmd);

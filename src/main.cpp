@@ -105,7 +105,9 @@ private:
     vk::raii::DeviceMemory indexBufferMemory = nullptr;
 
     vk::raii::CommandPool commandPool = nullptr;
-    std::vector<vk::raii::CommandBuffer> commandBuffers;
+    vk::raii::CommandBuffers commandBuffers = nullptr;
+
+    vk::raii::CommandPool transferCommandPool = nullptr;
 
     std::vector<vk::raii::Semaphore> presentCompleteSemaphores;
     std::vector<vk::raii::Semaphore> renderFinishedSemaphores;
@@ -156,11 +158,15 @@ private:
         createSwapChain();
 		std::cout << "creating image views" << std::endl;
         createImageViews();
+        std::cout << "creating tranfer command pool" << std::endl;
+        //createTransferCommandPool();
 		std::cout << "creating command pool" << std::endl;
         createCommandPool();
+		std::cout << "creating command buffers" << std::endl;
+        createCommandBuffers();
 		std::cout << "creating compute screen" << std::endl;
         // TODO: initialTransition on computeScreen
-        computeScreen.create(allocator, device, swapChainExtent.width, swapChainExtent.height);
+        computeScreen.create(allocator, device, graphicsIndex, swapChainExtent.width, swapChainExtent.height);
 		std::cout << "creating compute pipeline" << std::endl;
         createComputePipeline();
 		std::cout << "creating graphics pipeline" << std::endl;
@@ -169,8 +175,6 @@ private:
         createVertexBuffer();
 		std::cout << "creating index buffer" << std::endl;
         createIndexBuffer();
-		std::cout << "creating command buffers" << std::endl;
-        createCommandBuffers();
 		std::cout << "creating synchronization objects" << std::endl;
         createSyncObjects();
     }
@@ -333,8 +337,9 @@ private:
         cleanupSwapChain();
         createSwapChain();
         createImageViews();
-        computeScreen.destroy(allocator);
-        computeScreen.create(allocator, device, swapChainExtent.width, swapChainExtent.height);
+        computeScreen.resize(allocator, device, graphicsIndex, swapChainExtent.width, swapChainExtent.height);
+        //computeScreen.destroy(allocator);
+        //computeScreen.create(allocator, device, graphicsIndex, swapChainExtent.width, swapChainExtent.height);
     }
 
     void cleanupSwapChain() {
@@ -505,6 +510,14 @@ private:
             }
         }
         throw std::runtime_error("failed to find suitable memory type!");
+    }
+
+    void createTransferCommandPool() {
+        vk::CommandPoolCreateInfo poolInfo{
+            .flags = vk::CommandPoolCreateFlagBits::eTransient,  // Optimized for short-lived buffers
+            .queueFamilyIndex = graphicsIndex
+        };
+        transferCommandPool = vk::raii::CommandPool(device, poolInfo);
     }
 
     void createCommandPool() {
