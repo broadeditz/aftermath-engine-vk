@@ -4,6 +4,7 @@ list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_LIST_DIR}/CMake")
 
 # Add option to enable/disable C++ 20 module
 option(ENABLE_CPP20_MODULE "Enable C++ 20 module support for Vulkan" ON)
+option(BUILD_TESTS "Build tests" OFF)
 
 # Enable C++ module dependency scanning only if C++ 20 module is enabled
 if(ENABLE_CPP20_MODULE)
@@ -13,8 +14,6 @@ endif()
 find_package (glfw3 REQUIRED)
 find_package (glm REQUIRED)
 find_package (Vulkan REQUIRED)
-find_package (tinygltf REQUIRED)
-find_package (KTX REQUIRED)
 find_package (VulkanMemoryAllocator REQUIRED)
 
 # set up Vulkan C++ module only if enabled
@@ -75,10 +74,13 @@ endif()
 find_package(stb REQUIRED)
 set(STB_INCLUDEDIR ${stb_INCLUDE_DIRS})
 
-add_executable (glslang::validator IMPORTED)
-find_program (GLSLANG_VALIDATOR "glslangValidator" HINTS $ENV{VULKAN_SDK}/bin REQUIRED)
-set_property (TARGET glslang::validator PROPERTY IMPORTED_LOCATION "${GLSLANG_VALIDATOR}")
-find_program(SLANGC_EXECUTABLE slangc HINTS $ENV{VULKAN_SDK}/bin REQUIRED)
+# Only find shader compilers if not building tests
+if(NOT BUILD_TESTS)
+  add_executable (glslang::validator IMPORTED)
+  find_program (GLSLANG_VALIDATOR "glslangValidator" HINTS $ENV{VULKAN_SDK}/bin REQUIRED)
+  set_property (TARGET glslang::validator PROPERTY IMPORTED_LOCATION "${GLSLANG_VALIDATOR}")
+  find_program(SLANGC_EXECUTABLE slangc HINTS $ENV{VULKAN_SDK}/bin REQUIRED)
+endif()
 
 function (add_shaders_target TARGET)
   cmake_parse_arguments ("SHADER" "" "CHAPTER_NAME" "SOURCES" ${ARGN})
@@ -118,30 +120,48 @@ function (add_slang_shader_target TARGET)
   add_custom_target (${TARGET} DEPENDS ${SHADERS_DIR}/slang.spv)
 endfunction()
 
-add_executable (main
-    main.cpp
-    screen/computescreen.cpp
-    uniforms/frame.cpp
-    uniforms/render.cpp
-    tree/tree.cpp
-)
-set_target_properties (main PROPERTIES CXX_STANDARD 20)
-target_link_libraries (main Vulkan::cppm glfw glm::glm KTX::ktx GPUOpen::VulkanMemoryAllocator)
-target_include_directories (main PRIVATE ${STB_INCLUDEDIR} "screen")
+# Only build main executable if not building tests
+if(NOT BUILD_TESTS)
+  add_executable (main
+      main.cpp
+      screen/computescreen.cpp
+      uniforms/frame.cpp
+      uniforms/render.cpp
+      tree/tree.cpp
+  )
+  set_target_properties (main PROPERTIES CXX_STANDARD 20)
+  target_link_libraries (main Vulkan::cppm glfw glm::glm GPUOpen::VulkanMemoryAllocator)
+  target_include_directories (main PRIVATE ${STB_INCLUDEDIR} "screen")
 
-if(ENABLE_CPP20_MODULE)
-  target_compile_definitions(main PRIVATE USE_CPP20_MODULES=1)
-endif()
+  if(ENABLE_CPP20_MODULE)
+    target_compile_definitions(main PRIVATE USE_CPP20_MODULES=1)
+  endif()
 
-if(WIN32)
-  if(${CMAKE_GENERATOR} MATCHES "Visual Studio.*")
-    set_target_properties(main PROPERTIES VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_BINARY_DIR}")
+  if(WIN32)
+    if(${CMAKE_GENERATOR} MATCHES "Visual Studio.*")
+      set_target_properties(main PROPERTIES VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_BINARY_DIR}")
+    endif()
+  endif()
+
+  # Compile shaders
+  file(GLOB SHADER_SOURCES shaders/*.slang)
+  if(SHADER_SOURCES)
+    add_slang_shader_target(main_shaders SOURCES ${SHADER_SOURCES})
+    add_dependencies(main main_shaders)
   endif()
 endif()
 
-# Compile shaders
-file(GLOB SHADER_SOURCES shaders/*.slang)
-if(SHADER_SOURCES)
-  add_slang_shader_target(main_shaders SOURCES ${SHADER_SOURCES})
-  add_dependencies(main main_shaders)
+# Build tests
+if(BUILD_TESTS)
+    add_executable(tree_tests 
+        tree/tree_test.cpp 
+        tree/tree.cpp
+    )
+    
+    target_link_libraries(tree_tests Vulkan::cppm glm::glm GPUOpen::VulkanMemoryAllocator)
+    target_include_directories(tree_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+    set_target_properties(tree_tests PROPERTIES CXX_STANDARD 20)
+    
+    enable_testing()
+    add_test(NAME TreeTests COMMAND tree_tests)
 endif()
