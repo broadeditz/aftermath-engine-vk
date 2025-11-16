@@ -25,8 +25,8 @@ float3 getNormal(float3 pos) {
 public raymarchResult raymarch(float3 rayOrigin, float3 rayDirection, int maxSteps, float maxDistance, float epsilon, StructuredBuffer<TreeNode> treeNodes, StructuredBuffer<TreeLeaf> treeLeaves) {
     float totalDistance = 0.0;
     float stepSize = 0.0;
-    float3 lastPosition = rayOrigin;
-    float3 lastDirection = rayDirection;
+    float3 currentPosition = rayOrigin;
+    float3 currentDirection = rayDirection;
     int steps = 0;
     uint8_t hits = 0;
 
@@ -36,24 +36,26 @@ public raymarchResult raymarch(float3 rayOrigin, float3 rayDirection, int maxSte
     bool enableWobble = (frequency != 0 && amplitude != 0);
 
     for (steps = 0; steps < maxSteps; steps++) {
+        if (totalDistance >= maxDistance) {
+            break;
+        }
+
         if (enableWobble) {
             // create perpendicular vectors to ray direction
-            float3 right = normalize(cross(lastDirection, float3(0, 1, 0)));
-            float3 up = normalize(cross(lastDirection, right));
+            float3 right = normalize(cross(currentDirection, float3(0, 1, 0)));
+            float3 up = normalize(cross(currentDirection, right));
 
             //float3 offset = up * (cos(totalDistance * frequency) * amplitude);
 
             float3 offset = right * (sin(totalDistance * frequency) * amplitude) +
                             up * (cos(totalDistance * frequency) * amplitude);
-            lastDirection = normalize(rayDirection + offset);
+            currentDirection = normalize(rayDirection + offset);
         };
-
-        float3 currentPosition = lastPosition + lastDirection * stepSize;
 
         TreeSDFResult result = treeSDF(currentPosition, treeNodes, treeLeaves);
 
-        //stepSize = result.voxel.distance;
-        stepSize = smoothUnion(sceneSDF(currentPosition), result.voxel.distance, 0.4) - epsilon;
+        stepSize = result.voxel.distance;
+        //stepSize = smoothUnion(sceneSDF(currentPosition), result.voxel.distance, 0.4) - epsilon;
 
         //stepSize = sceneSDF(currentPosition);
 
@@ -68,12 +70,9 @@ public raymarchResult raymarch(float3 rayOrigin, float3 rayDirection, int maxSte
             //break;
         }
 
-        totalDistance += stepSize;
+        currentPosition += currentDirection * stepSize;
 
-        if (totalDistance >= maxDistance) {
-            break;
-        }
-        lastPosition = currentPosition;
+        totalDistance += stepSize;
     }
 
     raymarchResult res;
