@@ -12,6 +12,7 @@ However, if you're experienced with C++ and graphics programming, feel free to e
 ## Features
 - Ray Marching: Utilizes ray marching techniques for rendering complex 3D scenes.
 - Ray projection onto variable aperture surface, for depth of field and bokeh effects.
+- Powerful voxel LODs thanks to a sparse distance field 64tree
 
 
 ## TODO/bug list
