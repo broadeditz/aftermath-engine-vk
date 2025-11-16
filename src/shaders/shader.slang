@@ -155,7 +155,7 @@ void computeMain(uint3 dispatchThreadID: SV_DispatchThreadID) {
         // note: negative epsilon ray march values could theoretically be used to see through voxels up to a given depth
         //raymarchResult result = raymarch(rayOrigin, rayDirection, 500, 100000.0, -1, treeNodes, treeLeaves);
         //raymarchResult result = raymarch(rayOrigin, rayDirection, 200, 100000.0, mapRange(sin(frameUniforms.time * 0.1)), treeNodes, treeLeaves);
-        raymarchResult result = raymarch(rayOrigin, rayDirection, 200, 100000.0, 0, treeNodes, treeLeaves);
+        raymarchResult result = raymarch(rayOrigin, rayDirection, 300, 100000.0, 0, treeNodes, treeLeaves);
 
         if (result.hits > 0) {
             float smoothSteps = float(result.steps) + result.lastStepSize / 0.01;

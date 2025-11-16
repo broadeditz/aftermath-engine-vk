@@ -90,6 +90,8 @@ int calculateLOD(int treeDepth, float distance, float lengthThreshold) {
     return (LOD > 3) ? LOD : 3;
 }
 
+const float minStep = 0.33;
+
 float sampleLipschitzBoundAt(vec3 position, float voxelSize) {
     float centerDistance = sampleDistanceAt(position);
 
@@ -100,7 +102,6 @@ float sampleLipschitzBoundAt(vec3 position, float voxelSize) {
     // Preserve the sign from center sample.
     // The minStep is kind of a magic number here that I'm not entirely sure why it makes the voxel marching work just right.
     // I'm also not sure if it's the optimal value at 0.05
-    const float minStep = 0.33;
     return (centerDistance >= 0 ? 1.0f : -1.0f) * fmax(conservativeMagnitude, voxelSize * minStep);
 }
 
@@ -139,9 +140,9 @@ void TreeManager::subdivideNode(
         //std::cout << halfDiagonal << " - " << distance << std::endl;
     //}
 
-	if (abs(distance) > halfDiagonal) {
-		uint32_t leafPointer = createLeaf(distance);
-		//uint32_t leafPointer = createLeaf(sampleDistanceAt(parentPosition));
+	if (abs(distance) > halfDiagonal * 1.01) {
+		//uint32_t leafPointer = createLeaf(distance);
+		uint32_t leafPointer = createLeaf(sampleDistanceAt(parentPosition));
 
 		nodes[parentIndex].childPointer = leafPointer | LEAF_NODE_FLAG;
 
@@ -157,9 +158,12 @@ void TreeManager::subdivideNode(
     if (depth >= LOD) {
         // We need this to prevent too big steps when the camera is close to the world plane
         // while not taking too small steps to reach further out terrain.
-        if (distanceFromCamera > 16 && depth == treeDepth) {
-            // sample real distance for bigger steps further from the camera
-            distance = sampleDistanceAt(parentPosition);
+        // sample real distance for bigger steps further from the camera
+        distance = sampleDistanceAt(parentPosition);
+
+        if (distance < voxelSize * minStep * 0.2) {
+            float sign = (distance > 0) ? 1 : -1;
+            distance = sign * voxelSize * minStep * 0.2;
         }
 
 		uint32_t leafPointer = createLeaf(distance);

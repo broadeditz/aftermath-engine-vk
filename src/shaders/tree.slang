@@ -15,8 +15,8 @@ public struct TreeLeaf {
 
 static const uint LEAF_FLAG = 0x80000000;
 
-static const uint treeDepth = 9; // Max depth of the tree, before arriving at voxel resolution, directly determines max render distance.
-static const float voxelSize = 0.25; // resolution of smallest voxel at the deepest point of the tree.
+public static const uint treeDepth = 9; // Max depth of the tree, before arriving at voxel resolution, directly determines max render distance.
+public static const float voxelSize = 0.25; // resolution of smallest voxel at the deepest point of the tree.
 
 // Use integer to represent voxel size
 // VOXEL_SIZE_NUM = numerator, VOXEL_SIZE_DENOM = denominator
@@ -60,6 +60,7 @@ public struct TreeSDFResult {
     public TreeLeaf voxel;
     public uint depth;
     public float voxelSize;
+    public float3 voxelCenter;
 }
 
 static const float3 rootOrigin = { 0, 0, 0 };
@@ -76,22 +77,11 @@ public TreeSDFResult treeSDF(float3 worldPos, StructuredBuffer<TreeNode> treeNod
             uint leafIndex = currentNode.childPointer & ~LEAF_FLAG;
             TreeLeaf leaf = treeLeaves[leafIndex];
 
-            // adjust distance based on offset from center of the node
-            //float3 offset = worldPos - nodeCenter;
-            //leaf.distance = leaf.distance - length(offset);
-
-            // Apply conservative bound while preserving sign
-            //float halfDiagonal = constants::getHalfDiagonal(depth);
-            //float sign = leaf.distance >= 0 ? 1.0 : -1.0;
-            //float conservativeMagnitude = abs(leaf.distance) - halfDiagonal;
-
-            // Clamp magnitude to ensure forward progress, keep sign
-            //leaf.distance = sign * max(conservativeMagnitude, voxelSize * 0.1);
-
             TreeSDFResult result;
             result.voxel = leaf;
             result.depth = depth;
             result.voxelSize = voxelSize;
+            result.voxelCenter = nodeCenter;
             return result;
         }
 

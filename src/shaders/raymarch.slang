@@ -54,8 +54,28 @@ public raymarchResult raymarch(float3 rayOrigin, float3 rayDirection, int maxSte
 
         TreeSDFResult result = treeSDF(currentPosition, treeNodes, treeLeaves);
 
+        // TODO: use epsilon instead of 0
+        if (result.depth >= treeDepth - 1 && result.voxel.distance > 0) {
+            float distance = result.voxel.distance;
+
+            // Calculate distance to exit voxel boundary
+            float halfSize = result.voxelSize * 0.5;
+            float3 voxelMin = result.voxelCenter - halfSize;
+            float3 voxelMax = result.voxelCenter + halfSize;
+
+            float3 t1 = (voxelMin - currentPosition) / currentDirection;
+            float3 t2 = (voxelMax - currentPosition) / currentDirection;
+            float3 tFar = max(t1, t2);
+            float tExit = min(tFar.x, min(tFar.y, tFar.z));
+
+            // Use whichever is bigger: distance to next voxel, or the SDF distance
+            result.voxel.distance = max(tExit + epsilon, distance);
+        }
+
         stepSize = result.voxel.distance;
-        //stepSize = smoothUnion(sceneSDF(currentPosition), result.voxel.distance, 0.4) - epsilon;
+        stepSize = smoothUnion(sceneSDF(currentPosition + float3(3, 0.8, 0)), result.voxel.distance, 0.4) - epsilon;
+
+        stepSize = subtract(sceneSDF(currentPosition + float3(-3, 0, 0)), stepSize);
 
         //stepSize = sceneSDF(currentPosition);
 
@@ -84,6 +104,6 @@ public raymarchResult raymarch(float3 rayOrigin, float3 rayDirection, int maxSte
 }
 
 float sceneSDF(float3 pos) {
-    return sphere(pos - float3(3.5,3.5,7), 1);
+    return sphere(pos - float3(0,-2,7), 1);
     //return repeatingSphere(pos - float3(3.5,3.5,0), 1, float3(7, 7, 7));
 }
