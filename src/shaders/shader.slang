@@ -131,7 +131,7 @@ void computeMain(uint3 dispatchThreadID: SV_DispatchThreadID) {
         (float(pixelCoords.y) / float(height) - 0.5) * 2.0
     );
 
-    float3 cameraPosition = float3(2.7, 2.7, 3.5);
+    float3 cameraPosition = float3(0, 0, 0);
     //float3 cameraPosition = float3(0.0, 0.0, frameUniforms.time * 0.4);
 
     // Point on the image plane (determines FOV)
