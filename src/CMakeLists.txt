@@ -149,6 +149,13 @@ if(NOT BUILD_TESTS)
     add_slang_shader_target(main_shaders SOURCES ${SHADER_SOURCES})
     add_dependencies(main main_shaders)
   endif()
+
+  add_custom_target(run
+    COMMAND $<TARGET_FILE:main>
+    DEPENDS main main_shaders
+    WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/src
+    COMMENT "Running main executable"
+)
 endif()
 
 # Build tests
