@@ -30,6 +30,9 @@ public raymarchResult raymarch(float3 rayOrigin, float3 rayDirection, int maxSte
     int steps = 0;
     uint8_t hits = 0;
 
+    // Precompute inverse direction once for efficiency
+    float3 invDir = 1.0 / (currentDirection + float3(1e-8));
+
     float frequency = 0.00;
     float amplitude = 0.0;
 
@@ -54,23 +57,43 @@ public raymarchResult raymarch(float3 rayOrigin, float3 rayDirection, int maxSte
 
         TreeSDFResult result = treeSDF(currentPosition, treeNodes, treeLeaves);
 
-        // TODO: use epsilon instead of 0
-        if (result.depth >= treeDepth - 1 && result.voxel.distance > 0) {
-            float distance = result.voxel.distance;
+        // Calculate distance to exit voxel boundary
 
-            // Calculate distance to exit voxel boundary
+        // For positive distances, try to skip to voxel boundary
+        if (result.voxel.distance > epsilon) {
             float halfSize = result.voxelSize * 0.5;
+            //float3 voxelMin = result.voxelCenter;
             float3 voxelMin = result.voxelCenter - halfSize;
+            //float3 voxelMax = result.voxelCenter + 2*halfSize;
             float3 voxelMax = result.voxelCenter + halfSize;
 
-            float3 t1 = (voxelMin - currentPosition) / currentDirection;
-            float3 t2 = (voxelMax - currentPosition) / currentDirection;
+            // Proper ray-box intersection
+            //float3 t1 = (voxelMin - currentPosition + float3(0.0, 0.5 *voxelSize, 0.0)) * invDir;
+            //float3 t2 = (voxelMax - currentPosition + float3(0.0, 0.5*voxelSize, 0.0)) * invDir;
+            float3 t1 = (voxelMin - currentPosition) * invDir;
+            float3 t2 = (voxelMax - currentPosition) * invDir;
+
+            float3 tNear = min(t1, t2);
             float3 tFar = max(t1, t2);
+
             float tExit = min(tFar.x, min(tFar.y, tFar.z));
 
-            // Use whichever is bigger: distance to next voxel, or the SDF distance
-            result.voxel.distance = max(tExit + epsilon, distance);
+            // Only use voxel exit if it's ahead of us and larger than SDF
+            // Add small bias to ensure we actually exit the voxel
+            if (tExit > epsilon * 0.1) {
+                if (bool(result.voxel.flags & LOD_FLAG)) {
+                    min(abs(result.voxel.distance), tExit) + epsilon;
+                } else {
+                    result.voxel.distance = max(result.voxel.distance, tExit + epsilon);
+                }
+            }
         }
+        //} else if (result.voxel.distance < 0) {
+            // Negative distance - marching backward to find surface
+            //float3 tNear = min(t1, t2);
+            //float tEntry = max(tNear.x, max(tNear.y, tNear.z));
+            //result.voxel.distance = max(tEntry - epsilon, distance);
+        //}
 
         stepSize = result.voxel.distance;
         stepSize = smoothUnion(sceneSDF(currentPosition + float3(3, 0.8, 0)), result.voxel.distance, 0.4) - epsilon;
@@ -79,7 +102,7 @@ public raymarchResult raymarch(float3 rayOrigin, float3 rayDirection, int maxSte
 
         //stepSize = sceneSDF(currentPosition);
 
-        if (stepSize < 0.001) {
+        if (stepSize < epsilon) {
             hits++;
             break;
 
@@ -89,6 +112,8 @@ public raymarchResult raymarch(float3 rayOrigin, float3 rayDirection, int maxSte
             //lastDirection = reflect(lastDirection, surfaceNormal);
             //break;
         }
+
+        //stepSize = max(stepSize, epsilon * 5.0);
 
         currentPosition += currentDirection * stepSize;
 
@@ -104,6 +129,6 @@ public raymarchResult raymarch(float3 rayOrigin, float3 rayDirection, int maxSte
 }
 
 float sceneSDF(float3 pos) {
-    return sphere(pos - float3(0,-2,7), 1);
+    return sphere(pos - float3(0,-2,3.5), 1);
     //return repeatingSphere(pos - float3(3.5,3.5,0), 1, float3(7, 7, 7));
 }
