@@ -1,12 +1,16 @@
 #pragma once
 #include <vulkan/vulkan_raii.hpp>
 #include <vk_mem_alloc.h>
+#include <glm/glm.hpp>
 
 struct FrameUniforms {
     float time;
     float aperture;
     float focusDistance;
     float fov;
+
+    glm::vec3 cameraPosition;
+    glm::vec2 cameraDirection;
 };
 
 class FrameDataManager {
