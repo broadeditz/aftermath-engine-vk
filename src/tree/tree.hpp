@@ -70,7 +70,7 @@ private:
     std::deque<nodeToProcess> queue;
     std::vector<float> voxelSizesAtDepth;
 
-    uint32_t createLeaf(float distance);
+    uint32_t createLeaf(float distance, bool lod);
     void subdivideNode(uint32_t parentIndex, int parentDepth, vec3 parentPosition);
 	// TODO: store freed indices for reuse
 

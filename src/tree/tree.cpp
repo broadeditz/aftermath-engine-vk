@@ -1,5 +1,85 @@
 ﻿#include "tree.hpp"
 
+#include <cmath>
+#include <glm/glm.hpp>
+
+// 3D Hash function for noise
+float hash3D(glm::vec3 p) {
+    p = glm::fract(p * glm::vec3(443.897f, 441.423f, 437.195f));
+    p += glm::dot(p, glm::vec3(p.y, p.z, p.x) + 19.19f);
+    return glm::fract((p.x + p.y) * p.z) * 2.0f - 1.0f; // Return [-1, 1]
+}
+
+// 3D Perlin-style noise
+float noise3D(glm::vec3 p) {
+    glm::vec3 i = glm::floor(p);
+    glm::vec3 f = glm::fract(p);
+    f = f * f * (3.0f - 2.0f * f); // Smoothstep
+
+    // Sample all 8 corners of the cube
+    float n000 = hash3D(i + glm::vec3(0, 0, 0));
+    float n100 = hash3D(i + glm::vec3(1, 0, 0));
+    float n010 = hash3D(i + glm::vec3(0, 1, 0));
+    float n110 = hash3D(i + glm::vec3(1, 1, 0));
+    float n001 = hash3D(i + glm::vec3(0, 0, 1));
+    float n101 = hash3D(i + glm::vec3(1, 0, 1));
+    float n011 = hash3D(i + glm::vec3(0, 1, 1));
+    float n111 = hash3D(i + glm::vec3(1, 1, 1));
+
+    // Trilinear interpolation
+    return glm::mix(
+        glm::mix(glm::mix(n000, n100, f.x), glm::mix(n010, n110, f.x), f.y),
+        glm::mix(glm::mix(n001, n101, f.x), glm::mix(n011, n111, f.x), f.y),
+        f.z
+    );
+}
+
+// 3D FBM
+float fbm3D(glm::vec3 p, int octaves = 4, float lacunarity = 2.0f, float gain = 0.5f) {
+    float value = 0.0f;
+    float amplitude = 1.0f;
+    float frequency = 1.0f;
+    float maxValue = 0.0f;
+
+    for (int i = 0; i < octaves; i++) {
+        value += amplitude * noise3D(p * frequency);
+        maxValue += amplitude;
+        amplitude *= gain;
+        frequency *= lacunarity;
+    }
+
+    return value / maxValue; // Returns [-1, 1]
+}
+
+// Volumetric terrain SDF - fully ray-marchable
+float terrainSDF(glm::vec3 p) {
+    // Base ground plane at y=0
+    float groundLevel = -3.0f;
+
+    // Parameters
+    const float scale = 0.01f;          // Noise frequency
+    const float amplitude = 30.0f;      // Height variation
+    const float density = 0.3f;         // How "solid" the noise is
+
+    // Large-scale terrain height using 2D noise
+    glm::vec3 heightSample = glm::vec3(p.x, 0.0f, p.z) * scale;
+    float terrainHeight = groundLevel + fbm3D(heightSample, 4) * amplitude;
+
+    // 3D volumetric noise for caves/overhangs/details
+    glm::vec3 volumeSample = p * scale * 2.0f;
+    float volumeNoise = fbm3D(volumeSample, 3);
+
+    // Combine: start with height field, then add volumetric details
+    float heightSDF = p.y - terrainHeight;
+
+    // Add 3D noise that gets stronger underground
+    // This creates caves, overhangs, etc.
+    float depthFactor = glm::clamp(-heightSDF / 50.0f, 0.0f, 1.0f);
+    float volumeContribution = volumeNoise * 10.0f * depthFactor;
+
+    return heightSDF + volumeContribution - density;
+}
+
 float length(vec3 pos) {
     return sqrt(pos.x * pos.x + pos.y * pos.y + pos.z * pos.z);
 }
@@ -10,10 +90,12 @@ vec3 sub(vec3 pos, vec3 move) {
 
 float sampleDistanceAt(vec3 position) {
     // Simple test example: distance increases with height, flat floor at -2 y
-    return position.y + 2;
+    //return position.y + 2;
 
     // simple sphere
-    return length(sub(position, vec3{0, 0, 10})) - 5;
+    //return length(sub(position, vec3{0, 0, 10})) - 5;
+
+    return terrainSDF(glm::vec3{ position.x, position.y, position.z });
 }
 
 
@@ -84,9 +166,7 @@ int calculateLOD(int treeDepth, float distance, float lengthThreshold) {
         LOD -= reductionSteps;
     }
 
-    // Optional: clamp LOD to prevent it from going below 0
-    if (LOD < 0) LOD = 0;
-
+    // clamp LOD to prevent it from going below a certain value
     return (LOD > 3) ? LOD : 3;
 }
 
@@ -97,23 +177,43 @@ float sampleLipschitzBoundAt(vec3 position, float voxelSize) {
 
     // Conservative bound on magnitude
     float halfDiagonal = voxelSize * 1.732050808f * 0.5f;
+    //float halfDiagonal = voxelSize * 0.5f;
     float conservativeMagnitude = abs(centerDistance) - halfDiagonal;
 
     // Preserve the sign from center sample.
     // The minStep is kind of a magic number here that I'm not entirely sure why it makes the voxel marching work just right.
     // I'm also not sure if it's the optimal value at 0.05
-    return (centerDistance >= 0 ? 1.0f : -1.0f) * fmax(conservativeMagnitude, voxelSize * minStep);
+    return (centerDistance >= 0 ? 1.0f : -1.0f) * fmax(conservativeMagnitude, voxelSize * minStep * 0.01);
 }
 
-uint32_t TreeManager::createLeaf(float distance) {
+float getLipschitzBound(float centerDistance, float voxelSize) {
+    // Conservative bound on magnitude
+    float halfDiagonal = voxelSize * 1.732050808f * 0.5f;
+    //float halfDiagonal = voxelSize * 0.5f;
+    float conservativeMagnitude = abs(centerDistance) - halfDiagonal;
+
+    // Preserve the sign from center sample.
+    // The minStep is kind of a magic number here that I'm not entirely sure why it makes the voxel marching work just right.
+    // I'm also not sure if it's the optimal value at 0.05
+    return (centerDistance >= 0 ? 1.0f : -1.0f) * fmax(conservativeMagnitude, voxelSize * minStep * 0.01);
+}
+
+uint32_t TreeManager::createLeaf(float distance, bool lod) {
 	MaterialType material;
 	if (distance < 0.00) {
 		material = MaterialType::Grass;
 	}
 
+    uint8_t flags = 0;
+
+    if (lod) {
+        flags = 1;
+    }
+
 	TreeLeaf leaf = {
 		.distance = distance,
 		.material = material,
+        .flags = flags,
 	};
 
 	uint32_t leafPointer = leaves.size();
@@ -131,18 +231,25 @@ void TreeManager::subdivideNode(
     //std::cout << depth << std::endl;
 	float voxelSize = getVoxelSizeAtDepth(depth);
 
-	float distance = sampleLipschitzBoundAt(parentPosition, voxelSize);
+	float distance = sampleDistanceAt(parentPosition);
+    float lipschitz = getLipschitzBound(distance, voxelSize);
 
 	// create sparsity leaf if the nearest surface is further than the size of the node
-    float halfDiagonal = voxelSize * 1.732050808f * 0.25f;
+    float halfDiagonal = voxelSize * 1.732050808f * 0.5f;
     //if (depth == 1) {
         //std::cout << "index: " << parentIndex << std::endl;
         //std::cout << halfDiagonal << " - " << distance << std::endl;
     //}
 
-	if (abs(distance) > halfDiagonal * 1.01) {
+	if (abs(lipschitz) > halfDiagonal * 1.01) {
 		//uint32_t leafPointer = createLeaf(distance);
-		uint32_t leafPointer = createLeaf(sampleDistanceAt(parentPosition));
+        //distance = sampleDistanceAt(parentPosition);
+        //if (distance < voxelSize * minStep * 0.05) {
+        //    float sign = (distance > 0) ? 1 : -1;
+        //    distance = sign * voxelSize * minStep * 0.05;
+        //}
+
+		uint32_t leafPointer = createLeaf(lipschitz, false);
 
 		nodes[parentIndex].childPointer = leafPointer | LEAF_NODE_FLAG;
 
@@ -159,14 +266,19 @@ void TreeManager::subdivideNode(
         // We need this to prevent too big steps when the camera is close to the world plane
         // while not taking too small steps to reach further out terrain.
         // sample real distance for bigger steps further from the camera
-        distance = sampleDistanceAt(parentPosition);
+        //distance = sampleDistanceAt(parentPosition);
 
-        if (distance < voxelSize * minStep * 0.2) {
-            float sign = (distance > 0) ? 1 : -1;
-            distance = sign * voxelSize * minStep * 0.2;
+        //if (distance < voxelSize * minStep * 0.01) {
+        //    float sign = (distance > 0) ? 1 : -1;
+        //    distance = sign * voxelSize * minStep * 0.01;
+        //}
+
+        //clamp to prevent steps smaller than voxel size
+        if (abs(distance) < voxelSize * minStep) {
+            distance = (distance >= 0 ? 1.0f : -1.0f) * voxelSize * minStep;
         }
 
-		uint32_t leafPointer = createLeaf(distance);
+		uint32_t leafPointer = createLeaf(distance, true);
 
 		nodes[parentIndex].childPointer = leafPointer | LEAF_NODE_FLAG;
 

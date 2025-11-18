@@ -30,7 +30,8 @@ struct TreeLeaf {
     float distance; // Distance from block center to nearest surface, can be negative
     MaterialType material;
     uint8_t damage; // damage to the block, 0-255
-    uint8_t padding[2]; // Padding for alignment, not needed, but good to be reminded that we can use another 16 bits worth of data here if needed
+    uint8_t flags;
+    // 15 bits of padding left
 };
 
 template<typename T>
