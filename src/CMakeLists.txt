@@ -128,6 +128,7 @@ if(NOT BUILD_TESTS)
       uniforms/frame.cpp
       uniforms/render.cpp
       tree/tree.cpp
+      camera/camera.cpp
   )
   set_target_properties (main PROPERTIES CXX_STANDARD 20)
   target_link_libraries (main Vulkan::cppm glfw glm::glm GPUOpen::VulkanMemoryAllocator)
