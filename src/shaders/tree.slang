@@ -11,7 +11,10 @@ public struct TreeLeaf {
     public float distance;        // Distance to nearest surface at this leaf
     public MaterialType material; // Material type at this leaf, if distance <= 0
     public uint8_t damage;        // Damage level at this leaf (0-255)
+    public uint8_t flags;         // Bitwise flags with metadata about the leaf
 }
+
+public static const uint LOD_FLAG = 0x01;
 
 static const uint LEAF_FLAG = 0x80000000;
 
