@@ -16,6 +16,7 @@
 #include <stdexcept>
 #include <vector>
 
+#include "camera/camera.hpp"
 #include "screen/computescreen.hpp"
 
 VULKAN_HPP_DEFAULT_DISPATCH_LOADER_DYNAMIC_STORAGE
@@ -37,10 +38,10 @@ struct Vertex {
 };
 
 const std::vector<Vertex> vertices = {
-    {{-1.0f, -1.0f}, {0.0f, 1.0f}},
-    {{1.0f, -1.0f},  {1.0f, 1.0f}},
-    {{1.0f, 1.0f},   {1.0f, 0.0f}},
-    {{-1.0f, 1.0f},  {0.0f, 0.0f}}
+    {{-1.0f, -1.0f}, {1.0f, 1.0f}},
+    {{1.0f, -1.0f},  {0.0f, 1.0f}},
+    {{1.0f, 1.0f},   {0.0f, 0.0f}},
+    {{-1.0f, 1.0f},  {1.0f, 0.0f}}
 };
 
 const std::vector<uint16_t> indices = { 0, 1, 2, 2, 3, 0 };
@@ -117,6 +118,8 @@ private:
     uint32_t currentFrame = 0;
     uint32_t semaphoreIndex = 0;
 
+    FPSCamera camera = nullptr;
+
     uint32_t frameCounter = 0;
     std::chrono::time_point<std::chrono::high_resolution_clock> lastTime = std::chrono::steady_clock::now();
 
@@ -177,6 +180,7 @@ private:
         createIndexBuffer();
 		std::cout << "creating synchronization objects" << std::endl;
         createSyncObjects();
+        camera = FPSCamera(window);
     }
 
     void createInstance() {
@@ -630,13 +634,20 @@ private:
             return;
         }
 
-        auto currentTime = std::chrono::high_resolution_clock::now();
+        auto currentTime = std::chrono::high_resolution_clock::now(); 
+        float deltaTime = std::chrono::duration<float>(currentTime - lastTime).count();
+
         float time = std::chrono::duration<float>(currentTime - startTime).count();
+
+        camera.update(deltaTime);
         computeScreen.frameData.update(FrameUniforms{
             .time = time,
-            .aperture = 0.005,
+            .aperture = 0.01,
             .focusDistance = 3.5,
-            .fov = 1.5
+            .fov = 1.5,
+            // TODO: pass position & direction from FPS controls
+            .cameraPosition = camera.getPosition(),
+            .cameraDirection = camera.getDirection(),
         });
 
         device.resetFences(*inFlightFences[currentFrame]);
