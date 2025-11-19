@@ -31,7 +31,7 @@ struct TreeLeaf {
     MaterialType material;
     uint8_t damage; // damage to the block, 0-255
     uint8_t flags;
-    // 15 bits of padding left
+    // 8 bits of padding left
 };
 
 template<typename T>

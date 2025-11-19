@@ -2,6 +2,10 @@
 
 #include <cmath>
 #include <glm/glm.hpp>
+#include <thread>
+#include <mutex>
+#include <atomic>
+#include <algorithm>
 
 // 3D Hash function for noise
 float hash3D(glm::vec3 p) {
@@ -100,7 +104,7 @@ float sampleDistanceAt(vec3 position) {
 
 
 float TreeManager::getVoxelSizeAtDepth(int depth) {
-	return voxelSizesAtDepth[depth];
+    return voxelSizesAtDepth[depth];
 }
 
 // Function to compute chunk center position based on sexagintaquartant index within the known parent chunk.
@@ -109,36 +113,36 @@ float TreeManager::getVoxelSizeAtDepth(int depth) {
 // Index 4-7 row 1 of layer 0
 // ...
 vec3 getChunkPosition2(uint32_t chunkIndex, float voxelSize, vec3 parentPosition) {
-	// Validate input
-	if (chunkIndex >= 64) {
-		// Return parent position for invalid index
-		return parentPosition;
-	}
+    // Validate input
+    if (chunkIndex >= 64) {
+        // Return parent position for invalid index
+        return parentPosition;
+    }
 
-	// Extract 3D coordinates from the linear index
-	// The subdivision is 4×4×4, so we have:
-	// - 4 chunks in X direction (index % 4)
-	// - 4 chunks in Y direction ((index / 4) % 4)
-	// - 4 chunks in Z direction (index / 16)
-	uint32_t x = chunkIndex % 4;
-	uint32_t y = (chunkIndex / 4) % 4;
-	uint32_t z = chunkIndex / 16;
+    // Extract 3D coordinates from the linear index
+    // The subdivision is 4×4×4, so we have:
+    // - 4 chunks in X direction (index % 4)
+    // - 4 chunks in Y direction ((index / 4) % 4)
+    // - 4 chunks in Z direction (index / 16)
+    uint32_t x = chunkIndex % 4;
+    uint32_t y = (chunkIndex / 4) % 4;
+    uint32_t z = chunkIndex / 16;
 
-	// Calculate the offset from parent center
-	// Parent chunk spans 4 child chunks in each direction
-	// Child chunks are arranged from -1.5 to +1.5 in relative coordinates
-	// (positions: -1.5, -0.5, +0.5, +1.5 in units of voxelSize)
-	float offsetX = (x - 1.5f) * voxelSize;
-	float offsetY = (y - 1.5f) * voxelSize;
-	float offsetZ = (z - 1.5f) * voxelSize;
+    // Calculate the offset from parent center
+    // Parent chunk spans 4 child chunks in each direction
+    // Child chunks are arranged from -1.5 to +1.5 in relative coordinates
+    // (positions: -1.5, -0.5, +0.5, +1.5 in units of voxelSize)
+    float offsetX = (x - 1.5f) * voxelSize;
+    float offsetY = (y - 1.5f) * voxelSize;
+    float offsetZ = (z - 1.5f) * voxelSize;
 
-	// Return the child chunk center position
-	vec3 result;
-	result.x = parentPosition.x + offsetX;
-	result.y = parentPosition.y + offsetY;
-	result.z = parentPosition.z + offsetZ;
+    // Return the child chunk center position
+    vec3 result;
+    result.x = parentPosition.x + offsetX;
+    result.y = parentPosition.y + offsetY;
+    result.z = parentPosition.z + offsetZ;
 
-	return result;
+    return result;
 }
 
 // Precompute offset lookup table
@@ -199,10 +203,10 @@ float getLipschitzBound(float centerDistance, float voxelSize) {
 }
 
 uint32_t TreeManager::createLeaf(float distance, bool lod) {
-	MaterialType material;
-	if (distance < 0.00) {
-		material = MaterialType::Grass;
-	}
+    MaterialType material;
+    if (distance < 0.00) {
+        material = MaterialType::Grass;
+    }
 
     uint8_t flags = 0;
 
@@ -210,58 +214,73 @@ uint32_t TreeManager::createLeaf(float distance, bool lod) {
         flags = 1;
     }
 
-	TreeLeaf leaf = {
-		.distance = distance,
-		.material = material,
+    TreeLeaf leaf = {
+        .distance = distance,
+        .material = material,
         .flags = flags,
-	};
+    };
 
-	uint32_t leafPointer = leaves.size();
-	leaves.push_back(leaf);
+    std::lock_guard<std::mutex> lock(leavesMutex);
+    uint32_t leafPointer = leaves.size();
+    leaves.push_back(leaf);
 
-	return leafPointer;
+    return leafPointer;
+}
+
+// Thread-safe node allocation - reserves space for 64 children at once
+uint32_t TreeManager::allocateChildNodes() {
+    std::lock_guard<std::mutex> lock(nodesMutex);
+    uint32_t childPointer = nodes.size();
+
+    // Reserve space for all 64 children
+    nodes.resize(nodes.size() + 64);
+
+    return childPointer;
 }
 
 // Create children for a node and add them to the processing queue
 void TreeManager::subdivideNode(
-	uint32_t parentIndex,
-	int depth,
-	vec3 parentPosition
+    uint32_t parentIndex,
+    int depth,
+    vec3 parentPosition
 ) {
     //std::cout << depth << std::endl;
-	float voxelSize = getVoxelSizeAtDepth(depth);
+    float voxelSize = getVoxelSizeAtDepth(depth);
 
-	float distance = sampleDistanceAt(parentPosition);
+    float distance = sampleDistanceAt(parentPosition);
     float lipschitz = getLipschitzBound(distance, voxelSize);
 
-	// create sparsity leaf if the nearest surface is further than the size of the node
+    // create sparsity leaf if the nearest surface is further than the size of the node
     float halfDiagonal = voxelSize * 1.732050808f * 0.5f;
     //if (depth == 1) {
         //std::cout << "index: " << parentIndex << std::endl;
         //std::cout << halfDiagonal << " - " << distance << std::endl;
     //}
 
-	if (abs(lipschitz) > halfDiagonal * 1.01) {
-		//uint32_t leafPointer = createLeaf(distance);
+    if (abs(lipschitz) > halfDiagonal * 1.01) {
+        //uint32_t leafPointer = createLeaf(distance);
         //distance = sampleDistanceAt(parentPosition);
         //if (distance < voxelSize * minStep * 0.05) {
         //    float sign = (distance > 0) ? 1 : -1;
         //    distance = sign * voxelSize * minStep * 0.05;
         //}
 
-		uint32_t leafPointer = createLeaf(lipschitz, false);
+        uint32_t leafPointer = createLeaf(lipschitz, false);
 
-		nodes[parentIndex].childPointer = leafPointer | LEAF_NODE_FLAG;
+        {
+            std::lock_guard<std::mutex> lock(nodesMutex);
+            nodes[parentIndex].childPointer = leafPointer | LEAF_NODE_FLAG;
+        }
 
-		return;
-	}
+        return;
+    }
 
     // TODO: precompute LOD for distance value as much as possible,
     // also, make it use actual camera position
     float distanceFromCamera = length(parentPosition);
     int LOD = calculateLOD(treeDepth, distanceFromCamera, 64);
 
-	// create voxel leaf if at smallest possible voxel resolution
+    // create voxel leaf if at smallest possible voxel resolution
     if (depth >= LOD) {
         // We need this to prevent too big steps when the camera is close to the world plane
         // while not taking too small steps to reach further out terrain.
@@ -278,52 +297,96 @@ void TreeManager::subdivideNode(
             distance = (distance >= 0 ? 1.0f : -1.0f) * voxelSize * minStep;
         }
 
-		uint32_t leafPointer = createLeaf(distance, true);
+        uint32_t leafPointer = createLeaf(distance, true);
 
-		nodes[parentIndex].childPointer = leafPointer | LEAF_NODE_FLAG;
+        {
+            std::lock_guard<std::mutex> lock(nodesMutex);
+            nodes[parentIndex].childPointer = leafPointer | LEAF_NODE_FLAG;
+        }
 
-		return;
-	}
+        return;
+    }
 
-	// set pointer of node to the first child -- which hasn't been created yet at this point(!)
-	uint32_t childPointer = nodes.size();
-	nodes[parentIndex].childPointer = childPointer;
+    // Allocate space for all 64 children at once (thread-safe)
+    uint32_t childPointer = allocateChildNodes();
+    {
+        std::lock_guard<std::mutex> nodesLock(nodesMutex);
+        nodes[parentIndex].childPointer = childPointer;
+    }
 
-	voxelSize = getVoxelSizeAtDepth(depth+1);
+    voxelSize = getVoxelSizeAtDepth(depth + 1);
 
-	// Create 64 children (4×4×4 subdivision)
-	for (uint32_t i = 0; i < 64; i++) {
-		vec3 childPosition = getChunkPosition(i, voxelSize, parentPosition);
+    // Create 64 children (4×4×4 subdivision)
 
-		TreeNode childNode = {};
-		childNode.childPointer = 0;
+    std::vector<nodeToProcess> newNodes;
+    newNodes.reserve(64);
+    for (uint32_t i = 0; i < 64; i++) {
+        vec3 childPosition = getChunkPosition(i, voxelSize, parentPosition);
 
-		uint32_t childIndex = nodes.size();
-		nodes.push_back(childNode);
+        TreeNode childNode = {};
+        childNode.childPointer = 0;
 
-		// Add child to queue for further processing
-		queue.push_back(nodeToProcess{ childIndex, depth + 1, childPosition });
-	}
+        uint32_t childIndex = childPointer + i;
+
+        {
+            std::lock_guard<std::mutex> nodesLock(nodesMutex);
+            nodes[childIndex] = childNode;
+        }
+
+        // Add child to queue for further processing (thread-safe)
+        newNodes.push_back(nodeToProcess{ childIndex, depth + 1, childPosition });
+    }
+
+    std::lock_guard<std::mutex> queueLock(queueMutex);
+    queue.insert(queue.end(), newNodes.begin(), newNodes.end());
+}
+
+// Worker thread function
+void TreeManager::workerThread() {
+    while (true) {
+        nodeToProcess current;
+
+        // Try to get work from queue
+        {
+            std::lock_guard<std::mutex> lock(queueMutex);
+            if (!queue.empty()) {
+                current = std::move(queue.front());
+                queue.pop_front();
+            }
+            else {
+                break;
+            }
+        }
+
+        // If we got work, process it
+        subdivideNode(current.parentNodeIndex, current.depth, current.parentPosition);
+    }
+
+    std::this_thread::yield();
+    // Decrement active worker count when exiting
+    activeWorkers.fetch_sub(1);
 }
 
 void TreeManager::createTestTree() {
     initVoxelSizes();
 
-	nodes.clear();
-	leaves.clear();
-	// Simple test tree with one root and 8 leaf children
-	TreeNode rootNode = {};
-	rootNode.childPointer = 1; // First child at index 1
-	nodes.push_back(rootNode);
+    nodes.clear();
+    leaves.clear();
+    queue.clear();
 
-	uint32_t leafIndex = 0;
-	float voxelSize = getVoxelSizeAtDepth(1);
+    // Simple test tree with one root and 8 leaf children
+    TreeNode rootNode = {};
+    rootNode.childPointer = 1; // First child at index 1
+    nodes.push_back(rootNode);
 
-	vec3 rootPosition = {
-		.x = 0.0,
-		.y = 0.0,
-		.z = 0.0,
-	};
+    uint32_t leafIndex = 0;
+    float voxelSize = getVoxelSizeAtDepth(1);
+
+    vec3 rootPosition = {
+        .x = 0.0,
+        .y = 0.0,
+        .z = 0.0,
+    };
 
     // Reserve space for all 64 root children first
     uint32_t firstChildIndex = nodes.size();
@@ -333,22 +396,37 @@ void TreeManager::createTestTree() {
         nodes.push_back(childNode);
     }
 
-	// Create 64 children (4×4×4 subdivision)
-	for (uint32_t i = 0; i < 64; i++) {
-		vec3 childPosition = getChunkPosition(i, voxelSize, rootPosition);
-
+    // Create 64 children (4×4×4 subdivision) and add to queue
+    for (uint32_t i = 0; i < 64; i++) {
+        vec3 childPosition = getChunkPosition(i, voxelSize, rootPosition);
         uint32_t childIndex = firstChildIndex + i;
+        queue.push_back(nodeToProcess{ childIndex, 1, childPosition });
+    }
 
-		// Add child to queue for further processing
-		queue.push_back(nodeToProcess{ childIndex, 1, childPosition });
+    // Determine number of threads (hardware concurrency or default to 4)
+    unsigned int numThreads = std::thread::hardware_concurrency();
+    if (numThreads == 0) numThreads = 4;
 
-	    while (!queue.empty()) {
-            nodeToProcess current = std::move(queue.front());
-		    queue.pop_front();
+    std::cout << "Starting tree generation with " << numThreads << " threads..." << std::endl;
 
-		    subdivideNode(current.parentNodeIndex, current.depth, current.parentPosition);
-	    }
-	}
+    // Initialize active worker counter
+    activeWorkers.store(numThreads);
+
+    // Launch worker threads
+    std::vector<std::thread> workers;
+    workers.reserve(numThreads);
+    for (unsigned int i = 0; i < numThreads; i++) {
+        workers.emplace_back(&TreeManager::workerThread, this);
+        std::cout << "starting tree worker" << std::endl;
+    }
+
+    // Wait for all workers to complete
+    for (auto& worker : workers) {
+        worker.join();
+        std::cout << "worker finished" << std::endl;
+    }
+
+    std::cout << "Tree generation complete!" << std::endl;
 
     queue.shrink_to_fit();
 

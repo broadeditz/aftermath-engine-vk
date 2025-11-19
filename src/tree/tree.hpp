@@ -1,16 +1,19 @@
+#ifndef TREE_HPP
+#define TREE_HPP
+
 #include <vk_mem_alloc.h>
 #include <cstdint>
 #include <vector>
 #include <deque>
+#include <mutex>
+#include <atomic>
 #include "buffer.hpp"
-
 #include <iostream>
 #include <iomanip>
 #include <string>
 #include <map>
 
 const uint32_t LEAF_NODE_FLAG = 0x80000000;
-
 const int treeDepth = 9; // Example depth for test tree
 const float baseVoxelSize = 0.25f; // Size of the smallest voxel at the deepest level
 
@@ -30,8 +33,8 @@ float sampleDistanceAt(vec3 position);
 
 class TreeManager {
 public:
-	std::vector<TreeNode> nodes;
-	std::vector<TreeLeaf> leaves;
+    std::vector<TreeNode> nodes;
+    std::vector<TreeLeaf> leaves;
 
     // GPU buffers
     TreeNodeBuffer nodeBuffer;
@@ -66,14 +69,27 @@ public:
     }
 
     void createTestTree();
+
 private:
+    // Work queue
     std::deque<nodeToProcess> queue;
+
+    // Synchronization primitives
+    std::mutex nodesMutex;      // Protects nodes vector
+    std::mutex leavesMutex;     // Protects leaves vector
+    std::mutex queueMutex;      // Protects work queue
+    std::atomic<int> activeWorkers{ 0 }; // Tracks active worker threads
+
+    // Voxel sizes
     std::vector<float> voxelSizesAtDepth;
 
+    // Thread-safe operations
     uint32_t createLeaf(float distance, bool lod);
+    uint32_t allocateChildNodes();  // Allocates space for 64 children
     void subdivideNode(uint32_t parentIndex, int parentDepth, vec3 parentPosition);
-	// TODO: store freed indices for reuse
+    void workerThread();  // Worker thread function
 
+    // TODO: store freed indices for reuse
     void printTreeStats();
     void printTree(uint32_t nodeIndex = 0, int depth = 0, std::string prefix = "", bool isLast = true);
     void visualizeTreeSlice(int sliceZ = 0);
@@ -91,3 +107,5 @@ private:
         }
     }
 };
+
+#endif // TREE_HPP
