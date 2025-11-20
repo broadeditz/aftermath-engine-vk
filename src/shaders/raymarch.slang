@@ -82,7 +82,7 @@ public raymarchResult raymarch(float3 rayOrigin, float3 rayDirection, int maxSte
             // Add small bias to ensure we actually exit the voxel
             if (tExit > epsilon * 0.1) {
                 if (bool(result.voxel.flags & LOD_FLAG)) {
-                    min(abs(result.voxel.distance), tExit) + epsilon;
+                    result.voxel.distance = min(abs(result.voxel.distance), tExit + epsilon);
                 } else {
                     result.voxel.distance = max(result.voxel.distance, tExit + epsilon);
                 }
@@ -96,9 +96,9 @@ public raymarchResult raymarch(float3 rayOrigin, float3 rayDirection, int maxSte
         //}
 
         stepSize = result.voxel.distance;
-        stepSize = smoothUnion(sceneSDF(currentPosition + float3(3, 0.8, 0)), result.voxel.distance, 0.4) - epsilon;
+        //stepSize = smoothUnion(sceneSDF(currentPosition + float3(0, 0, 0)), result.voxel.distance, 0.4) - epsilon;
 
-        stepSize = subtract(sceneSDF(currentPosition + float3(-3, 0, 0)), stepSize);
+        //stepSize = subtract(sceneSDF(currentPosition + float3(-3, 0, 0)), stepSize);
 
         //stepSize = sceneSDF(currentPosition);
 
@@ -129,6 +129,6 @@ public raymarchResult raymarch(float3 rayOrigin, float3 rayDirection, int maxSte
 }
 
 float sceneSDF(float3 pos) {
-    return sphere(pos - float3(0,-2,3.5), 1);
+    return sphere(pos - float3(0,-2,4.5), 1);
     //return repeatingSphere(pos - float3(3.5,3.5,0), 1, float3(7, 7, 7));
 }
