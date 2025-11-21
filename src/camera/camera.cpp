@@ -74,10 +74,10 @@ void FPSCamera::processKeyboard(float deltaTime) {
 
     // Speed modifier with Left Control
     if (glfwGetKey(window, GLFW_KEY_LEFT_CONTROL) == GLFW_PRESS) {
-        moveSpeed = 7.0f; // Fast mode
+        moveSpeed = 7.0f; // Sprint, roughly 25km/h, high end in average humans
     }
     else {
-        moveSpeed = 1.750f; // Normal speed
+        moveSpeed = 1.750f; // Walk, roughly 6km/h, fast walking speed irl
     }
 }
 
@@ -104,8 +104,6 @@ void FPSCamera::processMouse() {
     yaw += static_cast<float>(xOffset);
     pitch += static_cast<float>(yOffset);
 
-    //std::cout << yaw << ", " << pitch << std::endl;
-
     // Constrain pitch to avoid gimbal lock
     if (pitch > 89.0f)
         pitch = 89.0f;
@@ -117,26 +115,10 @@ void FPSCamera::updateCameraVectors() {
     // Calculate the new forward vector
     glm::vec3 newForward;
     newForward.x = sin(glm::radians(yaw)) * (cos(glm::radians(pitch)) * 0.5 + 0.5);
-    //newForward.y = sin(glm::radians(pitch));
     newForward.y = sin(glm::radians(pitch));
     newForward.z = cos(glm::radians(yaw)) * (cos(glm::radians(pitch)) * 0.5 + 0.5);
-    //newForward.z = cos(glm::radians(yaw)) * cos(glm::radians(pitch));
-
-
-    // DEBUG: Print the values
-    static int frameCount = 0;
-    frameCount++;
-    if (frameCount % 60 == 0) {  // Print every 60 frames
-        printf("Yaw: %.2f, Pitch: %.2f\n", yaw, pitch);
-        printf("newForward: (%.3f, %.3f, %.3f)\n", newForward.x, newForward.y, newForward.z);
-    }
 
     forward = glm::normalize(newForward);
-
-    // DEBUG: Print the values
-    if (frameCount % 60 == 0) {  // Print every 60 frames
-        printf("Forward: (%.3f, %.3f, %.3f)\n", forward.x, forward.y, forward.z);
-    }
 
     // Recalculate right and up vectors
     right = glm::normalize(glm::cross(forward, glm::vec3(0.0f, 1.0f, 0.0f)));
