@@ -74,10 +74,10 @@ void FPSCamera::processKeyboard(float deltaTime) {
 
     // Speed modifier with Left Control
     if (glfwGetKey(window, GLFW_KEY_LEFT_CONTROL) == GLFW_PRESS) {
-        moveSpeed = 5.0f; // Fast mode
+        moveSpeed = 7.0f; // Fast mode
     }
     else {
-        moveSpeed = 1.0f; // Normal speed
+        moveSpeed = 1.750f; // Normal speed
     }
 }
 
