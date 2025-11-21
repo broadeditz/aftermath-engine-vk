@@ -14,11 +14,6 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     }) });
-    // const exe = b.addExecutable(.{
-    //     .name = "Aftermath",
-    //     .target = target,
-    //     .optimize = optimize,
-    // });
 
     // Add C++ source files
     exe.addCSourceFiles(.{
@@ -102,12 +97,64 @@ pub fn build(b: *std.Build) void {
     exe.addIncludePath(.{ .cwd_relative = b.fmt("{s}/include", .{vcpkg_path}) });
     exe.addIncludePath(.{ .cwd_relative = b.fmt("{s}/include/vma", .{vcpkg_path}) });
 
+    // Shader compilation
+    const slangc_path = if (vulkan_sdk) |sdk|
+        switch (target.result.os.tag) {
+            .windows => b.fmt("{s}/Bin/slangc.exe", .{sdk}),
+            else => b.fmt("{s}/bin/slangc", .{sdk}),
+        }
+    else switch (target.result.os.tag) {
+        .windows => "C:\\VulkanSDK\\1.4.XXX.X\\Bin\\slangc.exe",
+        .linux => "/usr/bin/slangc",
+        .macos => "/usr/local/bin/slangc",
+        else => "slangc",
+    };
+
+    // Verify slangc binary exists
+    std.fs.cwd().access(slangc_path, .{}) catch |err| {
+        std.debug.print("Warning: slangc not found at {s}: {}\n", .{ slangc_path, err });
+    };
+
+    const compile_shaders = b.step("shaders", "Compile Slang shaders");
+
+    const shader_output_path = b.pathJoin(&.{ b.install_prefix, "bin", "shaders", "slang.spv" });
+
+    const shader_cmd = b.addSystemCommand(&.{slangc_path});
+    shader_cmd.addArgs(&.{
+        "src/shaders/shader.slang",
+        "-target",
+        "spirv",
+        "-profile",
+        "spirv_1_4",
+        "-emit-spirv-directly",
+        "-fvk-use-entrypoint-name",
+        "-entry",
+        "vertMain",
+        "-entry",
+        "fragMain",
+        "-entry",
+        "computeMain",
+        "-o",
+        shader_output_path,
+    });
+
+    // Ensure output directory exists before running command
+    const ensure_dir = b.addSystemCommand(&.{ "cmd", "/c", "if not exist" });
+    ensure_dir.addArg(b.pathJoin(&.{ b.install_prefix, "bin", "shaders" }));
+    ensure_dir.addArg("mkdir");
+    ensure_dir.addArg(b.pathJoin(&.{ b.install_prefix, "bin", "shaders" }));
+
+    shader_cmd.step.dependOn(&ensure_dir.step);
+    compile_shaders.dependOn(&shader_cmd.step);
+    b.getInstallStep().dependOn(compile_shaders);
+
     // Install the executable
     b.installArtifact(exe);
 
     // Create a run step
     const run_cmd = b.addRunArtifact(exe);
     run_cmd.step.dependOn(b.getInstallStep());
+    run_cmd.setCwd(.{ .cwd_relative = "zig-out/bin" });
 
     if (b.args) |args| {
         run_cmd.addArgs(args);
