@@ -97,7 +97,6 @@ pub fn build(b: *std.Build) void {
     exe.linkSystemLibrary("glm");
 
     exe.addIncludePath(.{ .cwd_relative = b.fmt("{s}/include", .{vcpkg_path}) });
-    exe.addIncludePath(.{ .cwd_relative = b.fmt("{s}/include/vma", .{vcpkg_path}) });
 
     // Shader compilation
     const slangc_path = if (vulkan_sdk) |sdk|
@@ -164,6 +163,11 @@ pub fn build(b: *std.Build) void {
 
     const run_step = b.step("run", "Run the application");
     run_step.dependOn(&run_cmd.step);
+
+    // Generate compile_commands.json
+    generateCompileCommands(b, target) catch |err| {
+        std.debug.print("Failed to generate compile_commands.json: {}\n", .{err});
+    };
 }
 
 fn getVcpkgTriplet(b: *std.Build, target: std.Target) []const u8 {
@@ -183,4 +187,69 @@ fn getVcpkgTriplet(b: *std.Build, target: std.Target) []const u8 {
     };
 
     return b.fmt("{s}-{s}", .{ arch, os });
+}
+
+fn generateCompileCommands(b: *std.Build, target: std.Build.ResolvedTarget) !void {
+    const vcpkg_triplet = getVcpkgTriplet(b, target.result);
+    const vcpkg_include = b.fmt("vcpkg_installed/{s}/include", .{vcpkg_triplet});
+
+    const vulkan_sdk = std.process.getEnvVarOwned(b.allocator, "VULKAN_SDK") catch null;
+    const vulkan_include = if (vulkan_sdk) |sdk|
+        b.fmt("{s}/Include", .{sdk})
+    else switch (target.result.os.tag) {
+        .windows => "C:/VulkanSDK/1.4.328.1/Include",
+        .linux => "/usr/include",
+        .macos => "/usr/local/include",
+        else => "/usr/include",
+    };
+
+    // Normalize paths to use forward slashes
+    const vcpkg_include_normalized = try normalizePathSeparators(b.allocator, vcpkg_include);
+    const vulkan_include_normalized = try normalizePathSeparators(b.allocator, vulkan_include);
+    const root = b.build_root.path orelse ".";
+    const root_normalized = try normalizePathSeparators(b.allocator, root);
+
+    const sources = [_][]const u8{
+        "src/main.cpp",
+        "src/screen/computescreen.cpp",
+        "src/uniforms/frame.cpp",
+        "src/uniforms/render.cpp",
+        "src/tree/tree.cpp",
+        "src/camera/camera.cpp",
+    };
+
+    var compile_commands = try std.ArrayList(u8).initCapacity(b.allocator, 4096);
+    const writer = compile_commands.writer(b.allocator);
+
+    try writer.writeAll("[\n");
+
+    for (sources, 0..) |source, i| {
+        try writer.print(
+            \\  {{
+            \\    "directory": "{s}",
+            \\    "command": "clang++ -std=c++23 -Wall -Wextra -DVULKAN_HPP_NO_STRUCT_CONSTRUCTORS -DVULKAN_HPP_DISPATCH_LOADER_DYNAMIC=1 -Wno-nullability-completeness -Wno-nullability-extension -Wno-unused-private-field -Wno-unknown-pragmas -I\"{s}\" -I\"{s}\" -c \"{s}\"",
+            \\    "file": "{s}"
+            \\  }}
+        , .{ root_normalized, vcpkg_include_normalized, vulkan_include_normalized, source, source });
+
+        if (i < sources.len - 1) {
+            try writer.writeAll(",\n");
+        } else {
+            try writer.writeAll("\n");
+        }
+    }
+
+    try writer.writeAll("]\n");
+
+    const file = try std.fs.cwd().createFile("compile_commands.json", .{});
+    defer file.close();
+    try file.writeAll(compile_commands.items);
+}
+
+fn normalizePathSeparators(allocator: std.mem.Allocator, path: []const u8) ![]u8 {
+    const normalized = try allocator.alloc(u8, path.len);
+    for (path, 0..) |c, i| {
+        normalized[i] = if (c == '\\') '/' else c;
+    }
+    return normalized;
 }
