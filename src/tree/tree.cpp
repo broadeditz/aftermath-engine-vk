@@ -166,7 +166,7 @@ int calculateLOD(int treeDepth, float distance, float lengthThreshold) {
 
     // Reduce LOD by 1 for each doubling of lengthThreshold
     if (distance > lengthThreshold) {
-        int reductionSteps = static_cast<int>(log2(distance / lengthThreshold));
+        int reductionSteps = static_cast<int>(sqrt(distance / lengthThreshold));
         LOD -= reductionSteps;
     }
 
@@ -278,7 +278,7 @@ void TreeManager::subdivideNode(
     // TODO: precompute LOD for distance value as much as possible,
     // also, make it use actual camera position
     float distanceFromCamera = length(parentPosition);
-    int LOD = calculateLOD(treeDepth, distanceFromCamera, 64);
+    int LOD = calculateLOD(treeDepth, distanceFromCamera, 128);
 
     // create voxel leaf if at smallest possible voxel resolution
     if (depth >= LOD) {
