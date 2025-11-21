@@ -86,10 +86,12 @@ pub fn build(b: *std.Build) void {
     exe.addLibraryPath(.{ .cwd_relative = b.fmt("{s}/include", .{vcpkg_path}) });
     exe.addLibraryPath(.{ .cwd_relative = b.fmt("{s}/bin", .{vcpkg_path}) });
 
-    const install_dll = b.addInstallFile(.{ .cwd_relative = b.fmt("vcpkg_installed/{s}/bin/glfw3.dll", .{vcpkg_triplet}) }, "bin/glfw3.dll");
+    if (target.result.os.tag == .windows) {
+        const install_dll = b.addInstallFile(.{ .cwd_relative = b.fmt("vcpkg_installed/{s}/bin/glfw3.dll", .{vcpkg_triplet}) }, "bin/glfw3.dll");
 
-    install_dll.step.dependOn(&exe.step);
-    b.getInstallStep().dependOn(&install_dll.step);
+        install_dll.step.dependOn(&exe.step);
+        b.getInstallStep().dependOn(&install_dll.step);
+    }
 
     exe.linkSystemLibrary("glfw3");
     exe.linkSystemLibrary("glm");
