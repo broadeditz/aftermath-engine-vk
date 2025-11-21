@@ -121,6 +121,7 @@ private:
     FPSCamera camera = nullptr;
 
     uint32_t frameCounter = 0;
+    std::chrono::time_point<std::chrono::high_resolution_clock> lastSecond = std::chrono::steady_clock::now();
     std::chrono::time_point<std::chrono::high_resolution_clock> lastTime = std::chrono::steady_clock::now();
 
     std::vector<const char*> deviceExtensions = {
@@ -620,10 +621,10 @@ private:
     void drawFrame() {
         device.waitForFences(*inFlightFences[currentFrame], vk::True, UINT64_MAX);
 
-        if (lastTime + std::chrono::seconds(1) <= std::chrono::steady_clock::now()) {
+        if (lastSecond + std::chrono::seconds(1) <= std::chrono::steady_clock::now()) {
             std::cout << "FPS: " << frameCounter << std::endl;
             frameCounter = 0;
-            lastTime = std::chrono::steady_clock::now();
+            lastSecond = std::chrono::steady_clock::now();
         }
 
         auto [result, imageIndex] = swapChain.acquireNextImage(UINT64_MAX, *presentCompleteSemaphores[semaphoreIndex], nullptr);
@@ -642,7 +643,7 @@ private:
         camera.update(deltaTime);
         computeScreen.frameData.update(FrameUniforms{
             .time = time,
-            .aperture = 0.01,
+            .aperture = 0.001,
             .focusDistance = 3.5,
             .fov = 1.5,
             // TODO: pass position & direction from FPS controls
@@ -690,6 +691,7 @@ private:
         semaphoreIndex = (semaphoreIndex + 1) % presentCompleteSemaphores.size();
         currentFrame = (currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
         frameCounter++;
+        lastTime = currentTime;
     }
 
     void mainLoop() {
