@@ -5,13 +5,13 @@
 FPSCamera::FPSCamera(GLFWwindow* window)
     : window(window)
     , position(0.0f, 0.0f, 0.0f)
-    , yaw(0.0f)
     , pitch(0.0f)
+    , yaw(90.0f)  // 90 degrees to start facing forward (positive Z)
     , forward(0.0f, 0.0f, 1.0f)
     , right(1.0f, 0.0f, 0.0f)
     , up(0.0f, 1.0f, 0.0f)
-    , moveSpeed(5.0f)
-    , mouseSensitivity(0.002f)
+    , moveSpeed(10.0f)
+    , mouseSensitivity(0.1f)
     , lastMouseX(0.0)
     , lastMouseY(0.0)
     , firstMouse(true)
@@ -48,21 +48,9 @@ void FPSCamera::update(float deltaTime) {
 }
 
 void FPSCamera::processKeyboard(float deltaTime) {
-    // Speed modifier with Left Control
-    if (glfwGetKey(window, GLFW_KEY_LEFT_CONTROL) == GLFW_PRESS) {
-        moveSpeed = 20.0f; // Fast mode
-    }
-    else {
-        moveSpeed = 5.0f; // Normal speed
-    }
-
     float velocity = moveSpeed * deltaTime;
 
     // WASD movement
-
-    // TODO:
-    // I'm not sure why, but these seem to adapt other keyboard layouts automatically.
-    // Investigate why/how, to know if it's reliable.
     if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS) {
         position += forward * velocity;
     }
@@ -70,10 +58,10 @@ void FPSCamera::processKeyboard(float deltaTime) {
         position -= forward * velocity;
     }
     if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS) {
-        position -= right * velocity;
+        position += right * velocity;
     }
     if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS) {
-        position += right * velocity;
+        position -= right * velocity;
     }
 
     // Vertical movement (noclip style)
@@ -83,45 +71,74 @@ void FPSCamera::processKeyboard(float deltaTime) {
     if (glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS) {
         position -= up * velocity;
     }
+
+    // Speed modifier with Left Control
+    if (glfwGetKey(window, GLFW_KEY_LEFT_CONTROL) == GLFW_PRESS) {
+        moveSpeed = 5.0f; // Fast mode
+    }
+    else {
+        moveSpeed = 1.0f; // Normal speed
+    }
 }
 
 void FPSCamera::processMouse() {
-    double currentMouseX, currentMouseY;
-    glfwGetCursorPos(window, &currentMouseX, &currentMouseY);
+    double mouseX, mouseY;
+    glfwGetCursorPos(window, &mouseX, &mouseY);
 
     if (firstMouse) {
-        lastMouseX = currentMouseX;
-        lastMouseY = currentMouseY;
+        lastMouseX = mouseX;
+        lastMouseY = mouseY;
         firstMouse = false;
         return;
     }
 
-    double offsetX = lastMouseX - currentMouseX;
-    double offsetY = lastMouseY - currentMouseY; // Reversed since y-coordinates go from bottom to top
+    double xOffset = mouseX - lastMouseX;
+    double yOffset = lastMouseY - mouseY;  // Reversed since y-coordinates go from bottom to top
 
-    lastMouseX = currentMouseX;
-    lastMouseY = currentMouseY;
+    lastMouseX = mouseX;
+    lastMouseY = mouseY;
 
-    yaw += static_cast<float>(offsetX) * mouseSensitivity;
-    pitch += static_cast<float>(offsetY) * mouseSensitivity;
+    xOffset *= mouseSensitivity;
+    yOffset *= mouseSensitivity;
 
-    //std::cout << yaw << std::endl;
+    yaw += static_cast<float>(xOffset);
+    pitch += static_cast<float>(yOffset);
 
-    // Constrain pitch to prevent screen flip
-    const float maxPitch = glm::radians(89.0f);
-    if (pitch > maxPitch) pitch = maxPitch;
-    if (pitch < -maxPitch) pitch = -maxPitch;
+    //std::cout << yaw << ", " << pitch << std::endl;
+
+    // Constrain pitch to avoid gimbal lock
+    if (pitch > 89.0f)
+        pitch = 89.0f;
+    if (pitch < -89.0f)
+        pitch = -89.0f;
 }
 
 void FPSCamera::updateCameraVectors() {
-    // Calculate forward vector from yaw and pitch
-    // Yaw rotates around Y axis (horizontal), pitch rotates around X axis (vertical)
-    forward.x = cos(yaw) * sin(pitch);
-    forward.y = sin(yaw);
-    forward.z = cos(yaw) * cos(pitch);
-    forward = glm::normalize(forward);
+    // Calculate the new forward vector
+    glm::vec3 newForward;
+    newForward.x = sin(glm::radians(yaw)) * (cos(glm::radians(pitch)) * 0.5 + 0.5);
+    //newForward.y = sin(glm::radians(pitch));
+    newForward.y = sin(glm::radians(pitch));
+    newForward.z = cos(glm::radians(yaw)) * (cos(glm::radians(pitch)) * 0.5 + 0.5);
+    //newForward.z = cos(glm::radians(yaw)) * cos(glm::radians(pitch));
 
-    // Calculate right and up vectors
+
+    // DEBUG: Print the values
+    static int frameCount = 0;
+    frameCount++;
+    if (frameCount % 60 == 0) {  // Print every 60 frames
+        printf("Yaw: %.2f, Pitch: %.2f\n", yaw, pitch);
+        printf("newForward: (%.3f, %.3f, %.3f)\n", newForward.x, newForward.y, newForward.z);
+    }
+
+    forward = glm::normalize(newForward);
+
+    // DEBUG: Print the values
+    if (frameCount % 60 == 0) {  // Print every 60 frames
+        printf("Forward: (%.3f, %.3f, %.3f)\n", forward.x, forward.y, forward.z);
+    }
+
+    // Recalculate right and up vectors
     right = glm::normalize(glm::cross(forward, glm::vec3(0.0f, 1.0f, 0.0f)));
     up = glm::normalize(glm::cross(right, forward));
 }

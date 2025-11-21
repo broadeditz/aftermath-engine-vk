@@ -43,7 +43,7 @@ struct FrameUniforms {
     float fov;
 
     float3 cameraPosition;
-    float2 cameraDirection;
+    float3 cameraDirection;
 };
 
 struct RenderUniforms {
@@ -124,7 +124,7 @@ void computeMain(uint3 dispatchThreadID: SV_DispatchThreadID) {
 
     float aspectRatio = float(width) / float(height);
 
-    int samplesPerPixel = 3;
+    int samplesPerPixel = 1;
 
     // Calculate position on the image plane (focal plane)
     float2 uv = float2(
@@ -135,30 +135,21 @@ void computeMain(uint3 dispatchThreadID: SV_DispatchThreadID) {
     float3 cameraPosition = frameUniforms.cameraPosition;
     //float3 cameraPosition = float3(0.0, 0.0, frameUniforms.time * 0.4);
 
-    // Convert camera direction (yaw, pitch) to a forward vector
-    float yaw = frameUniforms.cameraDirection.x;
-    float pitch = frameUniforms.cameraDirection.y;
-
-    float3 forward = float3(
-        cos(yaw) * sin(pitch),
-        sin(yaw),
-        cos(yaw) * cos(pitch)
-    );
+    float3 forward = normalize(frameUniforms.cameraDirection);
 
     // Calculate right and up vectors for the camera
     float3 worldUp = float3(0, 1, 0);
-    float3 right = normalize(cross(worldUp, forward));
-    float3 up = cross(forward, right);
+    float3 right = normalize(cross(forward, worldUp));
+    float3 up = normalize(cross(right, forward));
 
-    // Point on the image plane using camera basis vectors
-    float3 imagePoint = cameraPosition + 
-                        forward * frameUniforms.fov + 
-                        right * uv.x + 
-                        up * uv.y;
+    // Calculate the center direction (no focal point yet, just the view direction)
+    float3 centerDirection = normalize(
+        forward * frameUniforms.fov + 
+        right * uv.x + 
+        up * uv.y
+    );
 
-    float3 centerDirection = normalize(imagePoint - cameraPosition);
-
-    // Focal point at the desired focus distance (this is where all rays should converge)
+    // Focal point for depth of field
     float3 focalPoint = cameraPosition + centerDirection * frameUniforms.focusDistance;
 
     float vogelOffset = hash(float2(pixelCoords) + frameUniforms.time * 100);
@@ -166,9 +157,9 @@ void computeMain(uint3 dispatchThreadID: SV_DispatchThreadID) {
     float3 fogAccum = float3(0, 0, 0);
     float3 colorAccum = float3(0.0, 0.0, 0.0);
     for (int i = 0; i < samplesPerPixel; i++) {
-        // apply aperture offset to ray origin
+        // Apply aperture offset in camera space (perpendicular to view direction)
         float2 apertureOffset = vogelDiskSample(i, samplesPerPixel, vogelOffset) * frameUniforms.aperture;
-        float3 rayOrigin = cameraPosition + float3(apertureOffset.x, apertureOffset.y, 0.0);
+        float3 rayOrigin = cameraPosition + right * apertureOffset.x + up * apertureOffset.y;
 
         // Final ray direction: from offset origin TO the fixed focal point
         float3 rayDirection = normalize(focalPoint - rayOrigin);
@@ -176,7 +167,7 @@ void computeMain(uint3 dispatchThreadID: SV_DispatchThreadID) {
         // note: negative epsilon ray march values could theoretically be used to see through voxels up to a given depth
         //raymarchResult result = raymarch(rayOrigin, rayDirection, 500, 100000.0, -1, treeNodes, treeLeaves);
         //raymarchResult result = raymarch(rayOrigin, rayDirection, 200, 100000.0, mapRange(sin(frameUniforms.time * 0.1)), treeNodes, treeLeaves);
-        raymarchResult result = raymarch(rayOrigin, rayDirection, 100, 100000.0, 0.005, treeNodes, treeLeaves);
+        raymarchResult result = raymarch(rayOrigin, rayDirection, 150, 100000.0, 0.005, treeNodes, treeLeaves);
 
         if (result.hits > 0) {
             float smoothSteps = float(result.steps);

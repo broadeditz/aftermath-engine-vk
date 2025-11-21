@@ -82,7 +82,8 @@ public raymarchResult raymarch(float3 rayOrigin, float3 rayDirection, int maxSte
             // Add small bias to ensure we actually exit the voxel
             if (tExit > epsilon * 0.1) {
                 if (bool(result.voxel.flags & LOD_FLAG)) {
-                    result.voxel.distance = min(abs(result.voxel.distance), tExit + epsilon);
+                    result.voxel.distance = tExit + epsilon;
+                    //result.voxel.distance = min(abs(result.voxel.distance), tExit + epsilon);
                 } else {
                     result.voxel.distance = max(result.voxel.distance, tExit + epsilon);
                 }

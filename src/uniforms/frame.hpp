@@ -10,7 +10,9 @@ struct FrameUniforms {
     float fov;
 
     glm::vec3 cameraPosition;
-    glm::vec2 cameraDirection;
+    float _pad0;  // padding
+    glm::vec3 cameraDirection;
+    float _pad1;  // padding
 };
 
 class FrameDataManager {

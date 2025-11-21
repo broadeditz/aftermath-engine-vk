@@ -11,7 +11,7 @@ public:
     void update(float deltaTime);
 
     glm::vec3 getPosition() const { return position; }
-    glm::vec2 getDirection() const { return glm::vec2(yaw, pitch); }
+    glm::vec3 getDirection() const { return forward; }
 
     void setPosition(const glm::vec3& pos) { position = pos; }
     void setSpeed(float speed) { moveSpeed = speed; }
@@ -25,8 +25,8 @@ private:
 
     // Camera position and orientation
     glm::vec3 position;
-    float yaw;   // Horizontal rotation (radians)
-    float pitch; // Vertical rotation (radians)
+    float pitch;
+    float yaw;
 
     // Camera vectors
     glm::vec3 forward;
