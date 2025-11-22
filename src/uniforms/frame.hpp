@@ -1,6 +1,6 @@
 #pragma once
 #include <vulkan/vulkan_raii.hpp>
-#include <vk_mem_alloc.h>
+#include <vma/vk_mem_alloc.h>
 #include <glm/glm.hpp>
 
 struct FrameUniforms {
