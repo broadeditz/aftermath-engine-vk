@@ -5,7 +5,7 @@
 #include <glm/glm.hpp>
 
 #define VMA_IMPLEMENTATION
-#include "vk_mem_alloc.h"
+#include "vma/vk_mem_alloc.h"
 
 #include <algorithm>
 #include <chrono>
@@ -138,7 +138,7 @@ private:
         glfwSetWindowUserPointer(window, this);
         glfwSetFramebufferSizeCallback(window, [](GLFWwindow* w, int, int) {
             reinterpret_cast<MainApplication*>(glfwGetWindowUserPointer(w))->framebufferResized = true;
-            });
+        });
     }
 
     void cleanup() {
@@ -187,7 +187,7 @@ private:
     void createInstance() {
         // *** FIRST: Initialize with vkGetInstanceProcAddr ***
         VULKAN_HPP_DEFAULT_DISPATCHER.init(context.getDispatcher()->vkGetInstanceProcAddr);
-    
+
         vk::ApplicationInfo appInfo{
             .pApplicationName = "Eldritch Aftermath",
             .applicationVersion = VK_MAKE_VERSION(0, 0, 1),
@@ -195,13 +195,13 @@ private:
             .engineVersion = VK_MAKE_VERSION(0, 0, 1),
             .apiVersion = vk::ApiVersion14
         };
-    
+
         std::vector<char const*> requiredLayers;
         if (dev) requiredLayers = validationLayers;
-    
+
         uint32_t glfwExtensionCount = 0;
         auto glfwExtensions = glfwGetRequiredInstanceExtensions(&glfwExtensionCount);
-    
+
         vk::InstanceCreateInfo createInfo{
             .pApplicationInfo = &appInfo,
             .enabledLayerCount = static_cast<uint32_t>(requiredLayers.size()),
@@ -209,9 +209,9 @@ private:
             .enabledExtensionCount = glfwExtensionCount,
             .ppEnabledExtensionNames = glfwExtensions,
         };
-    
+
         instance = vk::raii::Instance(context, createInfo);
-    
+
         // *** THEN: Initialize with the instance ***
         VULKAN_HPP_DEFAULT_DISPATCHER.init(*instance);
     }
@@ -343,8 +343,6 @@ private:
         createSwapChain();
         createImageViews();
         computeScreen.resize(allocator, device, graphicsIndex, swapChainExtent.width, swapChainExtent.height);
-        //computeScreen.destroy(allocator);
-        //computeScreen.create(allocator, device, graphicsIndex, swapChainExtent.width, swapChainExtent.height);
     }
 
     void cleanupSwapChain() {
@@ -621,12 +619,6 @@ private:
     void drawFrame() {
         device.waitForFences(*inFlightFences[currentFrame], vk::True, UINT64_MAX);
 
-        if (lastSecond + std::chrono::seconds(1) <= std::chrono::steady_clock::now()) {
-            std::cout << "FPS: " << frameCounter << std::endl;
-            frameCounter = 0;
-            lastSecond = std::chrono::steady_clock::now();
-        }
-
         auto [result, imageIndex] = swapChain.acquireNextImage(UINT64_MAX, *presentCompleteSemaphores[semaphoreIndex], nullptr);
         if (result == vk::Result::eErrorOutOfDateKHR || framebufferResized) {
             framebufferResized = false;
@@ -635,12 +627,20 @@ private:
             return;
         }
 
-        auto currentTime = std::chrono::high_resolution_clock::now(); 
+        auto currentTime = std::chrono::high_resolution_clock::now();
         float deltaTime = std::chrono::duration<float>(currentTime - lastTime).count();
 
         float time = std::chrono::duration<float>(currentTime - startTime).count();
 
         camera.update(deltaTime);
+
+        if (lastSecond + std::chrono::seconds(1) <= std::chrono::steady_clock::now()) {
+            std::cout << "FPS: " << frameCounter << std::endl;
+            std::cout << camera.getPosition().x << ", " << camera.getPosition().y << ", " << camera.getPosition().z << std::endl;
+            frameCounter = 0;
+            lastSecond = std::chrono::steady_clock::now();
+        }
+
         computeScreen.frameData.update(FrameUniforms{
             .time = time,
             .aperture = 0.001,
