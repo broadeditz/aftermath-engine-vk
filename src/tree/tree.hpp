@@ -1,7 +1,7 @@
 #ifndef TREE_HPP
 #define TREE_HPP
 
-#include <vk_mem_alloc.h>
+#include <vma/vk_mem_alloc.h>
 #include <cstdint>
 #include <vector>
 #include <deque>

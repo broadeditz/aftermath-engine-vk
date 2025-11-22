@@ -252,19 +252,8 @@ void TreeManager::subdivideNode(
 
     // create sparsity leaf if the nearest surface is further than the size of the node
     float halfDiagonal = voxelSize * 1.732050808f * 0.5f;
-    //if (depth == 1) {
-        //std::cout << "index: " << parentIndex << std::endl;
-        //std::cout << halfDiagonal << " - " << distance << std::endl;
-    //}
 
     if (abs(lipschitz) > halfDiagonal * 1.01) {
-        //uint32_t leafPointer = createLeaf(distance);
-        //distance = sampleDistanceAt(parentPosition);
-        //if (distance < voxelSize * minStep * 0.05) {
-        //    float sign = (distance > 0) ? 1 : -1;
-        //    distance = sign * voxelSize * minStep * 0.05;
-        //}
-
         uint32_t leafPointer = createLeaf(lipschitz, false);
 
         {
@@ -282,16 +271,6 @@ void TreeManager::subdivideNode(
 
     // create voxel leaf if at smallest possible voxel resolution
     if (depth >= LOD) {
-        // We need this to prevent too big steps when the camera is close to the world plane
-        // while not taking too small steps to reach further out terrain.
-        // sample real distance for bigger steps further from the camera
-        //distance = sampleDistanceAt(parentPosition);
-
-        //if (distance < voxelSize * minStep * 0.01) {
-        //    float sign = (distance > 0) ? 1 : -1;
-        //    distance = sign * voxelSize * minStep * 0.01;
-        //}
-
         //clamp to prevent steps smaller than voxel size
         if (abs(distance) < voxelSize * minStep) {
             distance = (distance >= 0 ? 1.0f : -1.0f) * voxelSize * minStep;
