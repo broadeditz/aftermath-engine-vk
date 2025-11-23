@@ -80,25 +80,6 @@ float hash(float2 p) {
   return frac((p3.x + p3.y) * p3.z);
 }
 
-float mapRange(float value) {
-  // Clamp input to ensure it's in [-1, 1]
-  value = clamp(value, -1.0, 1.0);
-
-  // Map from [-1, 1] to [-5, 0.001]
-  // Formula: output = ((value - inputMin) / (inputMax - inputMin)) * (outputMax
-  // - outputMin) + outputMin
-  float inputMin = -1.0;
-  float inputMax = 1.0;
-  float outputMin = -3.0;
-  float outputMax = 0.001;
-
-  float normalized =
-      (value - inputMin) / (inputMax - inputMin); // Maps to [0, 1]
-  float result = normalized * (outputMax - outputMin) + outputMin;
-
-  return result;
-}
-
 // Vogel disk sampling - evenly distributed points in a disk
 float2 vogelDiskSample(int sampleIndex, int numSamples, float rotation) {
   const float goldenAngle = 2.39996323; // 2*PI / golden ratio
@@ -166,13 +147,9 @@ void computeMain(uint3 dispatchThreadID: SV_DispatchThreadID) {
     float3 rayDirection = normalize(focalPoint - rayOrigin);
 
     // note: negative epsilon ray march values could theoretically be used to
-    // see through voxels up to a given depth
-    // raymarchResult result = raymarch(rayOrigin, rayDirection, 500, 100000.0,
-    // -1, treeNodes, treeLeaves); raymarchResult result = raymarch(rayOrigin,
-    // rayDirection, 200, 100000.0, mapRange(sin(frameUniforms.time * 0.1)),
-    // treeNodes, treeLeaves);
+    // see through voxels up to a given depth, probably doesn't work right now.
     raymarchResult result = raymarch(rayOrigin, rayDirection, 200, 100000.0,
-                                     0.001, treeNodes, treeLeaves, false);
+                                     0.0001, treeNodes, treeLeaves, false);
 
     if (result.hits > 0) {
       float3 sunDirection = normalize(float3(0.4, 1, 0.3));
@@ -187,7 +164,7 @@ void computeMain(uint3 dispatchThreadID: SV_DispatchThreadID) {
       if (normalDotSun > 0.001) {
         float3 shadowOrigin = result.hitPosition + result.hitNormal * 0.02;
         raymarchResult shadowProbe =
-            raymarch(shadowOrigin, sunDirection, 50, 1000, 0.01, treeNodes,
+            raymarch(shadowOrigin, sunDirection, 50, 1000, 0.0001, treeNodes,
                      treeLeaves, true);
 
         // Soft shadows - clamp to [0, 1]
