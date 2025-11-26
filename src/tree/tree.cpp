@@ -229,7 +229,7 @@ uint32_t TreeManager::createLeaf(float distance, bool lod) {
 
 // Thread-safe node allocation - reserves space for 64 children at once
 uint32_t TreeManager::allocateChildNodes() {
-    std::lock_guard<std::mutex> lock(nodesMutex);
+    std::unique_lock<std::shared_mutex> lock(nodesMutex);
     uint32_t childPointer = nodes.size();
 
     // Reserve space for all 64 children
@@ -257,7 +257,7 @@ void TreeManager::subdivideNode(
         uint32_t leafPointer = createLeaf(lipschitz, false);
 
         {
-            std::lock_guard<std::mutex> lock(nodesMutex);
+            std::shared_lock<std::shared_mutex> lock(nodesMutex);
             nodes[parentIndex].childPointer = leafPointer | LEAF_NODE_FLAG;
         }
 
@@ -279,7 +279,7 @@ void TreeManager::subdivideNode(
         uint32_t leafPointer = createLeaf(distance, true);
 
         {
-            std::lock_guard<std::mutex> lock(nodesMutex);
+            std::shared_lock<std::shared_mutex> lock(nodesMutex);
             nodes[parentIndex].childPointer = leafPointer | LEAF_NODE_FLAG;
         }
 
@@ -289,7 +289,7 @@ void TreeManager::subdivideNode(
     // Allocate space for all 64 children at once (thread-safe)
     uint32_t childPointer = allocateChildNodes();
     {
-        std::lock_guard<std::mutex> nodesLock(nodesMutex);
+        std::shared_lock<std::shared_mutex> nodesLock(nodesMutex);
         nodes[parentIndex].childPointer = childPointer;
     }
 
@@ -308,7 +308,7 @@ void TreeManager::subdivideNode(
         uint32_t childIndex = childPointer + i;
 
         {
-            std::lock_guard<std::mutex> nodesLock(nodesMutex);
+            std::shared_lock<std::shared_mutex> nodesLock(nodesMutex);
             nodes[childIndex] = childNode;
         }
 

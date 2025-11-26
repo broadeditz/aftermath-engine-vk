@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <vector>
 #include <mutex>
+#include <shared_mutex>
 #include <iostream>
 #include <iomanip>
 #include <string>
@@ -79,7 +80,7 @@ private:
     WaitGroup wg;
 
     // Synchronization primitives
-    std::mutex nodesMutex;      // Protects nodes vector
+    std::shared_mutex nodesMutex;      // Protects nodes vector
     std::mutex leavesMutex;     // Protects leaves vector
 
     // Voxel sizes
