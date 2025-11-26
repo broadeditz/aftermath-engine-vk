@@ -4,14 +4,16 @@
 #include <vma/vk_mem_alloc.h>
 #include <cstdint>
 #include <vector>
-#include <deque>
 #include <mutex>
-#include <atomic>
-#include "buffer.hpp"
 #include <iostream>
 #include <iomanip>
 #include <string>
 #include <map>
+#include <thread>
+
+#include "buffer.hpp"
+#include "../util/channel.hpp"
+#include "../util/waitgroup.hpp"
 
 const uint32_t LEAF_NODE_FLAG = 0x80000000;
 const int treeDepth = 9; // Example depth for test tree
@@ -72,13 +74,13 @@ public:
 
 private:
     // Work queue
-    std::deque<nodeToProcess> queue;
+    std::vector<std::thread> workers;
+    Channel<nodeToProcess> queue;
+    WaitGroup wg;
 
     // Synchronization primitives
     std::mutex nodesMutex;      // Protects nodes vector
     std::mutex leavesMutex;     // Protects leaves vector
-    std::mutex queueMutex;      // Protects work queue
-    std::atomic<int> activeWorkers{ 0 }; // Tracks active worker threads
 
     // Voxel sizes
     std::vector<float> voxelSizesAtDepth;
@@ -105,6 +107,22 @@ private:
         for (int i = 0; i <= treeDepth; i++) {
             voxelSizesAtDepth[i] = baseVoxelSize * pow(4.0f, treeDepth - i);
         }
+    }
+
+    void startWorkers() {
+        unsigned int numThreads = std::thread::hardware_concurrency();
+        if (numThreads == 0) numThreads = 4;
+
+        workers.reserve(numThreads);
+        for (unsigned int i = 0; i < numThreads; i++) {
+            workers.emplace_back(&TreeManager::workerThread, this);
+        }
+
+        std::cout << "Starting tree generation with " << numThreads << " threads..." << std::endl;
+    }
+
+    void stopWorkers() {
+    	queue.close();
     }
 };
 

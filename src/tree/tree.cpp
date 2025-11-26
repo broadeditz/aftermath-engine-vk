@@ -1,11 +1,10 @@
 ﻿#include "tree.hpp"
+#include "buffer.hpp"
 
 #include <cmath>
 #include <glm/glm.hpp>
 #include <thread>
 #include <mutex>
-#include <atomic>
-#include <algorithm>
 
 // 3D Hash function for noise
 float hash3D(glm::vec3 p) {
@@ -203,7 +202,7 @@ float getLipschitzBound(float centerDistance, float voxelSize) {
 }
 
 uint32_t TreeManager::createLeaf(float distance, bool lod) {
-    MaterialType material;
+    MaterialType material = MaterialType::Void;
     if (distance < 0.00) {
         material = MaterialType::Grass;
     }
@@ -217,6 +216,7 @@ uint32_t TreeManager::createLeaf(float distance, bool lod) {
     TreeLeaf leaf = {
         .distance = distance,
         .material = material,
+        .damage = 0,
         .flags = flags,
     };
 
@@ -316,8 +316,8 @@ void TreeManager::subdivideNode(
         newNodes.push_back(nodeToProcess{ childIndex, depth + 1, childPosition });
     }
 
-    std::lock_guard<std::mutex> queueLock(queueMutex);
-    queue.insert(queue.end(), newNodes.begin(), newNodes.end());
+    wg.add(64);
+    queue.sendMany(newNodes);
 }
 
 // Worker thread function
@@ -327,23 +327,17 @@ void TreeManager::workerThread() {
 
         // Try to get work from queue
         {
-            std::lock_guard<std::mutex> lock(queueMutex);
-            if (!queue.empty()) {
-                current = std::move(queue.front());
-                queue.pop_front();
-            }
-            else {
-                break;
+            if (!queue.receive(current)) {
+            	break; // channel closed
             }
         }
 
         // If we got work, process it
         subdivideNode(current.parentNodeIndex, current.depth, current.parentPosition);
+        wg.done();
     }
 
     std::this_thread::yield();
-    // Decrement active worker count when exiting
-    activeWorkers.fetch_sub(1);
 }
 
 void TreeManager::createTestTree() {
@@ -351,7 +345,6 @@ void TreeManager::createTestTree() {
 
     nodes.clear();
     leaves.clear();
-    queue.clear();
 
     // Simple test tree with one root and 8 leaf children
     TreeNode rootNode = {};
@@ -379,31 +372,16 @@ void TreeManager::createTestTree() {
     for (uint32_t i = 0; i < 64; i++) {
         vec3 childPosition = getChunkPosition(i, voxelSize, rootPosition);
         uint32_t childIndex = firstChildIndex + i;
-        queue.push_back(nodeToProcess{ childIndex, 1, childPosition });
+        queue.send(nodeToProcess{ childIndex, 1, childPosition });
     }
-
-    // Determine number of threads (hardware concurrency or default to 4)
-    unsigned int numThreads = std::thread::hardware_concurrency();
-    if (numThreads == 0) numThreads = 4;
-
-    std::cout << "Starting tree generation with " << numThreads << " threads..." << std::endl;
 
     // Initialize active worker counter
-    activeWorkers.store(numThreads);
+    wg.add(64);
 
-    // Launch worker threads
-    std::vector<std::thread> workers;
-    workers.reserve(numThreads);
-    for (unsigned int i = 0; i < numThreads; i++) {
-        workers.emplace_back(&TreeManager::workerThread, this);
-        std::cout << "starting tree worker" << std::endl;
-    }
+    startWorkers();
 
     // Wait for all workers to complete
-    for (auto& worker : workers) {
-        worker.join();
-        std::cout << "worker finished" << std::endl;
-    }
+    wg.wait();
 
     std::cout << "Tree generation complete!" << std::endl;
 
