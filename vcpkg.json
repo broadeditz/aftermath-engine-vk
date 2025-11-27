@@ -1,12 +1,5 @@
 {
-    "name": "aftermath-engine-vk",
-    "version-string": "0.0.1",
-    "dependencies": [
-        "fmt",
-        "spdlog",
-        "glfw3",
-        "glm",
-        "ktx",
-        "vulkan-memory-allocator"
-    ]
+  "name": "aftermath-engine-vk",
+  "version-string": "0.0.1",
+  "dependencies": ["fmt", "glfw3", "glm", "vulkan-memory-allocator"]
 }
