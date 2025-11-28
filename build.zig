@@ -197,6 +197,7 @@ fn generateCompileCommands(b: *std.Build, target: std.Build.ResolvedTarget) !voi
     const vulkan_include = if (vulkan_sdk) |sdk|
         b.fmt("{s}/Include", .{sdk})
     else switch (target.result.os.tag) {
+        // TODO: find installed vulkan version
         .windows => "C:/VulkanSDK/1.4.328.1/Include",
         .linux => "/usr/include",
         .macos => "/usr/local/include",
