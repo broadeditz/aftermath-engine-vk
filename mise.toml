@@ -59,3 +59,4 @@ alias = "run-debug"
 [tools]
 cmake = "latest"
 ninja = "latest"
+zig = "0.15.3"
