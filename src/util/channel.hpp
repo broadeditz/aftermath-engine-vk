@@ -68,6 +68,10 @@ class Channel {
 		return true;
     }
 
+    int size() {
+    	return queue.size();
+    }
+
     void shrink_to_fit() {
     	std::unique_lock<std::mutex> lock(mx);
     	queue.shrink_to_fit();
