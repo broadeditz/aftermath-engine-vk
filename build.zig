@@ -25,6 +25,8 @@ pub fn build(b: *std.Build) void {
             "src/screen/computescreen.cpp",
 
             "src/tree/tree.cpp",
+            "src/tree/tree_stale.cpp",
+            "src/tree/tree_util.cpp",
 
             "src/uniforms/frame.cpp",
             "src/uniforms/render.cpp",
@@ -216,6 +218,8 @@ fn generateCompileCommands(b: *std.Build, target: std.Build.ResolvedTarget) !voi
         "src/uniforms/frame.cpp",
         "src/uniforms/render.cpp",
         "src/tree/tree.cpp",
+        "src/tree/tree_stale.cpp",
+        "src/tree/tree_util.cpp",
         "src/camera/camera.cpp",
     };
 
