@@ -10,19 +10,28 @@
 #include <iomanip>
 #include <string>
 #include <map>
+#include <unordered_map>
 #include <thread>
-
+#include <unordered_set>
 #include "buffer.hpp"
 #include "../util/channel.hpp"
 #include "../util/waitgroup.hpp"
 
 const uint32_t LEAF_NODE_FLAG = 0x80000000;
-const int treeDepth = 9; // Example depth for test tree
-const float baseVoxelSize = 0.25f; // Size of the smallest voxel at the deepest level
+const int treeDepth = 9;
+const float baseVoxelSize = 0.25f;
 
 struct vec3 {
     float x, y, z;
 };
+
+inline float length(vec3 pos) {
+    return sqrt(pos.x * pos.x + pos.y * pos.y + pos.z * pos.z);
+}
+
+inline vec3 sub(vec3 pos, vec3 move) {
+    return { pos.x - move.x, pos.y - move.y, pos.z - move.z };
+}
 
 struct nodeToProcess {
     uint32_t parentNodeIndex;
@@ -37,7 +46,9 @@ float sampleDistanceAt(vec3 position);
 class TreeManager {
 public:
     std::vector<TreeNode> nodes;
+    std::deque<uint32_t> freeNodeIndices;
     std::vector<TreeLeaf> leaves;
+    std::deque<uint32_t> freeLeafIndices;
 
     // GPU buffers
     TreeNodeBuffer nodeBuffer;
@@ -72,8 +83,23 @@ public:
     }
 
     void createTestTree();
+    void moveObserver(vec3 pos);
+    void updateStaleLODs();
+
+    // Destructor to clean up workers
+    ~TreeManager() {
+        stopWorkers();
+        destroyBuffers();
+    }
 
 private:
+    vec3 observerPos;
+    vec3 rootPosition = {
+        .x = 0.0,
+        .y = 0.0,
+        .z = 0.0,
+    };
+
     // Work queue
     std::vector<std::thread> workers;
     Channel<nodeToProcess> queue;
@@ -83,14 +109,17 @@ private:
     std::shared_mutex nodesMutex;      // Protects nodes vector
     std::mutex leavesMutex;     // Protects leaves vector
 
+    // Stale node tracking
+    Channel<nodeToProcess> staleQueue;  // Queue of stale nodes to rebuild
+    float lastObserverUpdateDistance = 0.0f;  // Track significant movement
+
     // Voxel sizes
     std::vector<float> voxelSizesAtDepth;
 
     // Thread-safe operations
     uint32_t createLeaf(float distance, bool lod);
-    uint32_t allocateChildNodes();  // Allocates space for 64 children
     void subdivideNode(uint32_t parentIndex, int parentDepth, vec3 parentPosition);
-    void workerThread();  // Worker thread function
+    void workerThread();
 
     // TODO: store freed indices for reuse
     void printTreeStats();
@@ -123,7 +152,76 @@ private:
     }
 
     void stopWorkers() {
-    	queue.close();
+        queue.close();
+        for (auto& worker : workers) {
+            if (worker.joinable()) {
+                worker.join();
+            }
+        }
+        workers.clear();
+    }
+
+    void markStaleNode(nodeToProcess node);
+    void markStaleRecursive(uint32_t nodeIndex, int depth, vec3 nodePosition);
+
+    // Thread-safe node allocation - reserves space for 64 children at once,
+    // to ensure somewhat contiguous memory allocation. Reuse freed nodes if available.
+    uint32_t allocateChildNodes() {
+	    if (!freeNodeIndices.empty()) {
+	        uint32_t index = std::move(freeNodeIndices.front());
+	        freeNodeIndices.pop_front();
+	        return index;
+	    }
+
+        std::unique_lock<std::shared_mutex> lock(nodesMutex);
+        uint32_t childPointer = nodes.size();
+
+        // Reserve space for all 64 children
+        nodes.resize(nodes.size() + 64);
+
+        return childPointer;
+    }
+
+    // Free a node and all its descendants
+    void freeNode(uint32_t index, bool pushBack) {
+        if (index >= nodes.size()) return;
+
+        uint32_t childPointer = nodes[index].childPointer;
+
+        if (childPointer & LEAF_NODE_FLAG) {
+            // Free the leaf
+            uint32_t leafIndex = childPointer & ~LEAF_NODE_FLAG;
+            freeLeaf(leafIndex);
+        } else if (childPointer != 0) {
+            // Recursively free all 64 children
+            for (uint32_t i = 0; i < 64; i++) {
+                freeNode(childPointer + i, i == 0);
+            }
+        }
+
+        // Clear and mark this node as free
+        nodes[index] = TreeNode{};
+        if (pushBack) {
+            freeNodeIndices.push_back(index);
+        }
+    }
+
+    // Same pattern for leaves
+    uint32_t allocateLeaf() {
+        if (!freeLeafIndices.empty()) {
+            uint32_t index = std::move(freeLeafIndices.front());
+            freeLeafIndices.pop_front();
+            return index;
+        }
+
+        uint32_t index = leaves.size();
+        leaves.push_back(TreeLeaf{});
+        return index;
+    }
+
+    void freeLeaf(uint32_t index) {
+        leaves[index] = TreeLeaf{};
+        freeLeafIndices.push_back(index);
     }
 };
 
