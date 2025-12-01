@@ -200,7 +200,7 @@ fn generateCompileCommands(b: *std.Build, target: std.Build.ResolvedTarget) !voi
         b.fmt("{s}/Include", .{sdk})
     else switch (target.result.os.tag) {
         // TODO: find installed vulkan version
-        .windows => "C:/VulkanSDK/1.4.328.1/Include",
+        .windows => try findLatestVulkanVersion(b.allocator),
         .linux => "/usr/include",
         .macos => "/usr/local/include",
         else => "/usr/include",
@@ -249,6 +249,49 @@ fn generateCompileCommands(b: *std.Build, target: std.Build.ResolvedTarget) !voi
     const file = try std.fs.cwd().createFile("compile_commands.json", .{});
     defer file.close();
     try file.writeAll(compile_commands.items);
+}
+
+fn findLatestVulkanVersion(allocator: std.mem.Allocator) ![]const u8 {
+    const vulkan_sdk_base = "C:/VulkanSDK";
+
+    var dir = std.fs.openDirAbsolute(vulkan_sdk_base, .{ .iterate = true }) catch |err| {
+        std.log.err("Failed to open VulkanSDK directory at {s}: {}", .{ vulkan_sdk_base, err });
+        return error.VulkanSDKNotFound;
+    };
+    defer dir.close();
+
+    var latest_version: ?struct { major: u32, minor: u32, patch: u32, build: u32, path: []const u8 } = null;
+
+    var iter = dir.iterate();
+    while (try iter.next()) |entry| {
+        if (entry.kind != .directory) continue;
+
+        // Parse version string (e.g., "1.4.328.1")
+        var parts = std.mem.splitScalar(u8, entry.name, '.');
+        const major = std.fmt.parseInt(u32, parts.next() orelse continue, 10) catch continue;
+        const minor = std.fmt.parseInt(u32, parts.next() orelse continue, 10) catch continue;
+        const patch = std.fmt.parseInt(u32, parts.next() orelse continue, 10) catch continue;
+        const b = std.fmt.parseInt(u32, parts.next() orelse continue, 10) catch continue;
+
+        // Only consider 1.4.x versions
+        if (major != 1 or minor != 4) continue;
+
+        if (latest_version == null or
+            patch > latest_version.?.patch or
+            (patch == latest_version.?.patch and b > latest_version.?.build))
+        {
+            const path = try std.fmt.allocPrint(allocator, "{s}/{s}/Include", .{ vulkan_sdk_base, entry.name });
+            latest_version = .{ .major = major, .minor = minor, .patch = patch, .build = b, .path = path };
+        }
+    }
+
+    if (latest_version) |version| {
+        std.log.info("Found Vulkan SDK 1.4.{d}.{d} at {s}", .{ version.patch, version.build, version.path });
+        return version.path;
+    }
+
+    std.log.err("No Vulkan SDK 1.4.x installation found in {s}", .{vulkan_sdk_base});
+    return error.NoVulkan14SDKFound;
 }
 
 fn normalizePathSeparators(allocator: std.mem.Allocator, path: []const u8) ![]u8 {
