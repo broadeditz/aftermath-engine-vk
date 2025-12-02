@@ -19,9 +19,9 @@ public:
     void cleanupSwapChain();
     void createImageViews(VulkanContext& ctx);
 
-    vk::raii::SwapchainKHR& getSwapChain();
+    const vk::raii::SwapchainKHR& getSwapChain() const;
     std::vector<vk::Image> getSwapChainImages();
-    std::vector<vk::raii::ImageView>& getSwapChainImageViews();
+    const std::vector<vk::raii::ImageView>& getSwapChainImageViews() const;
     vk::SurfaceFormatKHR getSwapChainSurfaceFormat();
     vk::Extent2D getSwapChainExtent();
 

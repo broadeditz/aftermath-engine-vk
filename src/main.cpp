@@ -19,6 +19,7 @@
 #include "camera/camera.hpp"
 #include "screen/computescreen.hpp"
 #include "vulkan/context.hpp"
+#include "vulkan/pipeline.hpp"
 #include "vulkan/swapchain.hpp"
 
 VULKAN_HPP_DEFAULT_DISPATCH_LOADER_DYNAMIC_STORAGE
@@ -78,14 +79,13 @@ public:
     GLFWwindow* window;
 
 private:
-	VulkanContext context;
 	vk::raii::SurfaceKHR surface = nullptr;
+	VulkanContext context;
 
 	SwapChainManager swapchainManager;
 
+	RenderPipeline renderPipeline;
     vk::raii::PipelineLayout graphicsPipelineLayout = nullptr;
-    vk::raii::Pipeline graphicsPipeline = nullptr;
-    vk::raii::Pipeline computePipeline = nullptr;
 
     ComputeToScreen computeScreen;
 
@@ -157,9 +157,10 @@ private:
         // TODO: initialTransition on computeScreen
         computeScreen.create(context.getAllocator(), context.getDevice(), context.getGraphicsQueueIndex(), swapchainManager.getSwapChainExtent().width, swapchainManager.getSwapChainExtent().height);
 		std::cout << "creating compute pipeline" << std::endl;
-        createComputePipeline();
+        renderPipeline.createComputePipeline(context, "shaders/slang.spv", *computeScreen.computePipelineLayout);
 		std::cout << "creating graphics pipeline" << std::endl;
-        createGraphicsPipeline();
+		vk::SurfaceFormatKHR swapChainSurfaceFormat = swapchainManager.getSwapChainSurfaceFormat();
+        renderPipeline.createGraphicsPipeline(context, "shaders/slang.spv", *computeScreen.graphicsPipelineLayout, swapChainSurfaceFormat.format, Vertex::getBindingDescription(), Vertex::getAttributeDescriptions());
 		std::cout << "creating vertex buffer" << std::endl;
         createVertexBuffer();
 		std::cout << "creating index buffer" << std::endl;
@@ -175,110 +176,6 @@ private:
             throw std::runtime_error("failed to create window surface!");
         }
         surface = vk::raii::SurfaceKHR(context.getInstance(), _surface);
-    }
-
-    void createComputePipeline() {
-        auto shaderCode = readFile("shaders/slang.spv");
-        vk::ShaderModuleCreateInfo createInfo{
-            .codeSize = shaderCode.size(),
-            .pCode = reinterpret_cast<const uint32_t*>(shaderCode.data())
-        };
-        vk::raii::ShaderModule shaderModule(context.getDevice(), createInfo);
-
-        vk::ComputePipelineCreateInfo pipelineInfo{
-            .stage = {
-                .stage = vk::ShaderStageFlagBits::eCompute,
-                .module = *shaderModule,
-                .pName = "computeMain"
-            },
-            .layout = *computeScreen.computePipelineLayout
-        };
-
-        computePipeline = vk::raii::Pipeline(context.getDevice(), nullptr, pipelineInfo);
-    }
-
-    void createGraphicsPipeline() {
-        auto shaderCode = readFile("shaders/slang.spv");
-        vk::ShaderModuleCreateInfo createInfo{
-            .codeSize = shaderCode.size(),
-            .pCode = reinterpret_cast<const uint32_t*>(shaderCode.data())
-        };
-        vk::raii::ShaderModule shaderModule(context.getDevice(), createInfo);
-
-        vk::PipelineShaderStageCreateInfo shaderStages[] = {
-            {.stage = vk::ShaderStageFlagBits::eVertex, .module = *shaderModule, .pName = "vertMain" },
-            {.stage = vk::ShaderStageFlagBits::eFragment, .module = *shaderModule, .pName = "fragMain" }
-        };
-
-        auto bindingDescription = Vertex::getBindingDescription();
-        auto attributeDescriptions = Vertex::getAttributeDescriptions();
-
-        vk::PipelineVertexInputStateCreateInfo vertexInputInfo{
-            .vertexBindingDescriptionCount = 1,
-            .pVertexBindingDescriptions = &bindingDescription,
-            .vertexAttributeDescriptionCount = static_cast<uint32_t>(attributeDescriptions.size()),
-            .pVertexAttributeDescriptions = attributeDescriptions.data()
-        };
-
-        vk::PipelineInputAssemblyStateCreateInfo inputAssembly{
-            .topology = vk::PrimitiveTopology::eTriangleList
-        };
-
-        vk::PipelineViewportStateCreateInfo viewportState{
-            .viewportCount = 1,
-            .scissorCount = 1
-        };
-
-        vk::PipelineRasterizationStateCreateInfo rasterizer{
-            .polygonMode = vk::PolygonMode::eFill,
-            .cullMode = vk::CullModeFlagBits::eNone,
-            .frontFace = vk::FrontFace::eClockwise,
-            .lineWidth = 1.0f
-        };
-
-        vk::PipelineMultisampleStateCreateInfo multisampling{
-            .rasterizationSamples = vk::SampleCountFlagBits::e1
-        };
-
-        vk::PipelineColorBlendAttachmentState colorBlendAttachment{
-            .blendEnable = vk::False,
-            .colorWriteMask = vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG |
-                            vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA
-        };
-
-        vk::PipelineColorBlendStateCreateInfo colorBlending{
-            .attachmentCount = 1,
-            .pAttachments = &colorBlendAttachment
-        };
-
-        std::vector<vk::DynamicState> dynamicStates = { vk::DynamicState::eViewport, vk::DynamicState::eScissor };
-        vk::PipelineDynamicStateCreateInfo dynamicState{
-            .dynamicStateCount = static_cast<uint32_t>(dynamicStates.size()),
-            .pDynamicStates = dynamicStates.data()
-        };
-
-        vk::SurfaceFormatKHR swapChainSurfaceFormat = swapchainManager.getSwapChainSurfaceFormat();
-
-        vk::PipelineRenderingCreateInfo renderingInfo{
-            .colorAttachmentCount = 1,
-            .pColorAttachmentFormats = &swapChainSurfaceFormat.format
-        };
-
-        vk::GraphicsPipelineCreateInfo pipelineInfo{
-            .pNext = &renderingInfo,
-            .stageCount = 2,
-            .pStages = shaderStages,
-            .pVertexInputState = &vertexInputInfo,
-            .pInputAssemblyState = &inputAssembly,
-            .pViewportState = &viewportState,
-            .pRasterizationState = &rasterizer,
-            .pMultisampleState = &multisampling,
-            .pColorBlendState = &colorBlending,
-            .pDynamicState = &dynamicState,
-            .layout = *computeScreen.graphicsPipelineLayout
-        };
-
-        graphicsPipeline = vk::raii::Pipeline(context.getDevice(), nullptr, pipelineInfo);
     }
 
     void createVertexBuffer() {
@@ -352,7 +249,7 @@ private:
         commandBuffers[currentFrame].begin({});
 
         // Run compute shader
-        computeScreen.recordCompute(commandBuffers[currentFrame], computePipeline);
+        computeScreen.recordCompute(commandBuffers[currentFrame], renderPipeline.getComputePipeline());
 
         // Transition swapchain image
         vk::ImageMemoryBarrier2 barrier{
@@ -388,7 +285,7 @@ private:
         };
 
         commandBuffers[currentFrame].beginRendering(renderingInfo);
-        commandBuffers[currentFrame].bindPipeline(vk::PipelineBindPoint::eGraphics, *graphicsPipeline);
+        commandBuffers[currentFrame].bindPipeline(vk::PipelineBindPoint::eGraphics, *renderPipeline.getGraphicsPipeline());
         commandBuffers[currentFrame].bindDescriptorSets(vk::PipelineBindPoint::eGraphics,
             *computeScreen.graphicsPipelineLayout, 0, computeScreen.graphicsSet, {});
         commandBuffers[currentFrame].bindVertexBuffers(0, *vertexBuffer, { 0 });
@@ -491,7 +388,7 @@ private:
         };
         context.getGraphicsQueue().submit(submitInfo, *inFlightFences[currentFrame]);
 
-        vk::raii::SwapchainKHR& swapChain = swapchainManager.getSwapChain();
+        const vk::raii::SwapchainKHR& swapChain = swapchainManager.getSwapChain();
 
         vk::PresentInfoKHR presentInfo{
             .waitSemaphoreCount = 1,

@@ -32,6 +32,7 @@ pub fn build(b: *std.Build) void {
             "src/uniforms/render.cpp",
 
             "src/vulkan/context.cpp",
+            "src/vulkan/pipeline.cpp",
             "src/vulkan/swapchain.cpp",
         },
         .flags = &.{
@@ -225,6 +226,7 @@ fn generateCompileCommands(b: *std.Build, target: std.Build.ResolvedTarget) !voi
         "src/uniforms/frame.cpp",
         "src/uniforms/render.cpp",
         "src/vulkan/context.cpp",
+        "src/vulkan/pipeline.cpp",
         "src/vulkan/swapchain.cpp",
     };
 

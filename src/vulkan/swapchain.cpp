@@ -89,11 +89,11 @@ vk::SurfaceFormatKHR SwapChainManager::getSwapChainSurfaceFormat() {
 	return swapChainSurfaceFormat;
 }
 
-vk::raii::SwapchainKHR& SwapChainManager::getSwapChain() {
+const vk::raii::SwapchainKHR& SwapChainManager::getSwapChain() const {
 	return swapChain;
 }
 
-std::vector<vk::raii::ImageView>& SwapChainManager::getSwapChainImageViews() {
+const std::vector<vk::raii::ImageView>& SwapChainManager::getSwapChainImageViews() const {
 	return swapChainImageViews;
 }
 
