@@ -19,6 +19,7 @@
 #include "camera/camera.hpp"
 #include "screen/computescreen.hpp"
 #include "vulkan/context.hpp"
+#include "vulkan/swapchain.hpp"
 
 VULKAN_HPP_DEFAULT_DISPATCH_LOADER_DYNAMIC_STORAGE
 
@@ -80,11 +81,7 @@ private:
 	VulkanContext context;
 	vk::raii::SurfaceKHR surface = nullptr;
 
-    vk::raii::SwapchainKHR swapChain = nullptr;
-    std::vector<vk::Image> swapChainImages;
-    vk::SurfaceFormatKHR swapChainSurfaceFormat;
-    vk::Extent2D swapChainExtent;
-    std::vector<vk::raii::ImageView> swapChainImageViews;
+	SwapChainManager swapchainManager;
 
     vk::raii::PipelineLayout graphicsPipelineLayout = nullptr;
     vk::raii::Pipeline graphicsPipeline = nullptr;
@@ -134,7 +131,7 @@ private:
     }
 
     void cleanup() {
-        cleanupSwapChain();
+        swapchainManager.cleanupSwapChain();
         computeScreen.destroy(context.getAllocator());
         vmaDestroyAllocator(context.getAllocator());
         glfwDestroyWindow(window);
@@ -148,19 +145,17 @@ private:
         createSurface();
 		std::cout << "initializing context" << std::endl;
 		context.init(*surface);
-		std::cout << "creating swap chain" << std::endl;
-        createSwapChain();
-		std::cout << "creating image views" << std::endl;
-        createImageViews();
-        std::cout << "creating tranfer command pool" << std::endl;
-        //createTransferCommandPool();
+		std::cout << "initializing swap chain" << std::endl;
+		int width = 0, height = 0;
+    	glfwGetFramebufferSize(window, &width, &height);
+        swapchainManager.init(context, width, height, *surface);
 		std::cout << "creating command pool" << std::endl;
         createCommandPool();
 		std::cout << "creating command buffers" << std::endl;
         createCommandBuffers();
 		std::cout << "creating compute screen" << std::endl;
         // TODO: initialTransition on computeScreen
-        computeScreen.create(context.getAllocator(), context.getDevice(), context.getGraphicsQueueIndex(), swapChainExtent.width, swapChainExtent.height);
+        computeScreen.create(context.getAllocator(), context.getDevice(), context.getGraphicsQueueIndex(), swapchainManager.getSwapChainExtent().width, swapchainManager.getSwapChainExtent().height);
 		std::cout << "creating compute pipeline" << std::endl;
         createComputePipeline();
 		std::cout << "creating graphics pipeline" << std::endl;
@@ -180,82 +175,6 @@ private:
             throw std::runtime_error("failed to create window surface!");
         }
         surface = vk::raii::SurfaceKHR(context.getInstance(), _surface);
-    }
-
-    void createSwapChain() {
-        auto capabilities = context.getPhysicalDevice().getSurfaceCapabilitiesKHR(*surface);
-        auto formats = context.getPhysicalDevice().getSurfaceFormatsKHR(*surface);
-        auto presentModes = context.getPhysicalDevice().getSurfacePresentModesKHR(*surface);
-
-        swapChainSurfaceFormat = formats[0];
-        for (const auto& format : formats) {
-            if (format.format == vk::Format::eB8G8R8A8Srgb &&
-                format.colorSpace == vk::ColorSpaceKHR::eSrgbNonlinear) {
-                swapChainSurfaceFormat = format;
-                break;
-            }
-        }
-
-        int width, height;
-        glfwGetFramebufferSize(window, &width, &height);
-        swapChainExtent = {
-            std::clamp(static_cast<uint32_t>(width), capabilities.minImageExtent.width, capabilities.maxImageExtent.width),
-            std::clamp(static_cast<uint32_t>(height), capabilities.minImageExtent.height, capabilities.maxImageExtent.height)
-        };
-
-        uint32_t imageCount = capabilities.minImageCount + 1;
-        if (capabilities.maxImageCount > 0) imageCount = std::min(imageCount, capabilities.maxImageCount);
-
-        vk::SwapchainCreateInfoKHR createInfo{
-            .surface = *surface,
-            .minImageCount = imageCount,
-            .imageFormat = swapChainSurfaceFormat.format,
-            .imageColorSpace = swapChainSurfaceFormat.colorSpace,
-            .imageExtent = swapChainExtent,
-            .imageArrayLayers = 1,
-            .imageUsage = vk::ImageUsageFlagBits::eColorAttachment,
-            .imageSharingMode = vk::SharingMode::eExclusive,
-            .preTransform = capabilities.currentTransform,
-            .compositeAlpha = vk::CompositeAlphaFlagBitsKHR::eOpaque,
-            .presentMode = vk::PresentModeKHR::eFifo,
-            .clipped = vk::True
-        };
-
-        swapChain = context.getDevice().createSwapchainKHR(createInfo);
-        swapChainImages = swapChain.getImages();
-    }
-
-    void recreateSwapChain() {
-        int width = 0, height = 0;
-        glfwGetFramebufferSize(window, &width, &height);
-        while (width == 0 || height == 0) {
-            glfwGetFramebufferSize(window, &width, &height);
-            glfwWaitEvents();
-        }
-
-        context.getDevice().waitIdle();
-        cleanupSwapChain();
-        createSwapChain();
-        createImageViews();
-        computeScreen.resize(context.getAllocator(), context.getDevice(), context.getGraphicsQueueIndex(), swapChainExtent.width, swapChainExtent.height);
-    }
-
-    void cleanupSwapChain() {
-        swapChainImageViews.clear();
-        swapChain = nullptr;
-    }
-
-    void createImageViews() {
-        swapChainImageViews.clear();
-        for (auto image : swapChainImages) {
-            vk::ImageViewCreateInfo createInfo{
-                .image = image,
-                .viewType = vk::ImageViewType::e2D,
-                .format = swapChainSurfaceFormat.format,
-                .subresourceRange = { vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1 }
-            };
-            swapChainImageViews.emplace_back(context.getDevice(), createInfo);
-        }
     }
 
     void createComputePipeline() {
@@ -338,6 +257,8 @@ private:
             .pDynamicStates = dynamicStates.data()
         };
 
+        vk::SurfaceFormatKHR swapChainSurfaceFormat = swapchainManager.getSwapChainSurfaceFormat();
+
         vk::PipelineRenderingCreateInfo renderingInfo{
             .colorAttachmentCount = 1,
             .pColorAttachmentFormats = &swapChainSurfaceFormat.format
@@ -410,14 +331,6 @@ private:
         throw std::runtime_error("failed to find suitable memory type!");
     }
 
-    void createTransferCommandPool() {
-        vk::CommandPoolCreateInfo poolInfo{
-            .flags = vk::CommandPoolCreateFlagBits::eTransient,  // Optimized for short-lived buffers
-            .queueFamilyIndex = context.getGraphicsQueueIndex()
-        };
-        transferCommandPool = vk::raii::CommandPool(context.getDevice(), poolInfo);
-    }
-
     void createCommandPool() {
         vk::CommandPoolCreateInfo poolInfo{
             .flags = vk::CommandPoolCreateFlagBits::eResetCommandBuffer,
@@ -448,7 +361,7 @@ private:
             .dstAccessMask = vk::AccessFlagBits2::eColorAttachmentWrite,
             .oldLayout = vk::ImageLayout::eUndefined,
             .newLayout = vk::ImageLayout::eColorAttachmentOptimal,
-            .image = swapChainImages[imageIndex],
+            .image = swapchainManager.getSwapChainImages()[imageIndex],
             .subresourceRange = { vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1 }
         };
         commandBuffers[currentFrame].pipelineBarrier2(vk::DependencyInfo{
@@ -458,12 +371,14 @@ private:
 
         // Render pass
         vk::RenderingAttachmentInfo colorAttachment{
-            .imageView = *swapChainImageViews[imageIndex],
+            .imageView = *swapchainManager.getSwapChainImageViews()[imageIndex],
             .imageLayout = vk::ImageLayout::eColorAttachmentOptimal,
             .loadOp = vk::AttachmentLoadOp::eClear,
             .storeOp = vk::AttachmentStoreOp::eStore,
             .clearValue = vk::ClearColorValue(0.0f, 0.0f, 0.0f, 1.0f)
         };
+
+        vk::Extent2D swapChainExtent = swapchainManager.getSwapChainExtent();
 
         vk::RenderingInfo renderingInfo{
             .renderArea = { {0, 0}, swapChainExtent },
@@ -502,7 +417,7 @@ private:
     }
 
     void createSyncObjects() {
-        for (size_t i = 0; i < swapChainImages.size(); i++) {
+        for (size_t i = 0; i < swapchainManager.getSwapChainImages().size(); i++) {
             presentCompleteSemaphores.emplace_back(context.getDevice(), vk::SemaphoreCreateInfo{});
             renderFinishedSemaphores.emplace_back(context.getDevice(), vk::SemaphoreCreateInfo{});
         }
@@ -514,10 +429,19 @@ private:
     void drawFrame() {
         context.getDevice().waitForFences(*inFlightFences[currentFrame], vk::True, UINT64_MAX);
 
-        auto [result, imageIndex] = swapChain.acquireNextImage(UINT64_MAX, *presentCompleteSemaphores[semaphoreIndex], nullptr);
+        auto [result, imageIndex] = swapchainManager.getSwapChain().acquireNextImage(UINT64_MAX, *presentCompleteSemaphores[semaphoreIndex], nullptr);
         if (result == vk::Result::eErrorOutOfDateKHR || framebufferResized) {
             framebufferResized = false;
-            recreateSwapChain();
+
+            int width = 0, height = 0;
+            glfwGetFramebufferSize(window, &width, &height);
+            while (width == 0 || height == 0) {
+                glfwGetFramebufferSize(window, &width, &height);
+                glfwWaitEvents();
+            }
+            swapchainManager.recreateSwapChain(context, width, height);
+
+            computeScreen.resize(context.getAllocator(), context.getDevice(), context.getGraphicsQueueIndex(), swapchainManager.getSwapChainExtent().width, swapchainManager.getSwapChainExtent().height);
             presentCompleteSemaphores[semaphoreIndex] = vk::raii::Semaphore(context.getDevice(), vk::SemaphoreCreateInfo{});
             return;
         }
@@ -567,6 +491,8 @@ private:
         };
         context.getGraphicsQueue().submit(submitInfo, *inFlightFences[currentFrame]);
 
+        vk::raii::SwapchainKHR& swapChain = swapchainManager.getSwapChain();
+
         vk::PresentInfoKHR presentInfo{
             .waitSemaphoreCount = 1,
             .pWaitSemaphores = &*renderFinishedSemaphores[semaphoreIndex],
@@ -579,12 +505,28 @@ private:
             result = context.getPresentQueue().presentKHR(presentInfo);
             if (result == vk::Result::eErrorOutOfDateKHR || result == vk::Result::eSuboptimalKHR || framebufferResized) {
                 framebufferResized = false;
-                recreateSwapChain();
+                int width = 0, height = 0;
+                glfwGetFramebufferSize(window, &width, &height);
+                while (width == 0 || height == 0) {
+                    glfwGetFramebufferSize(window, &width, &height);
+                    glfwWaitEvents();
+                }
+                swapchainManager.recreateSwapChain(context, width, height);
+
+                computeScreen.resize(context.getAllocator(), context.getDevice(), context.getGraphicsQueueIndex(), swapchainManager.getSwapChainExtent().width, swapchainManager.getSwapChainExtent().height);
             }
         }
         catch (const vk::SystemError& e) {
             if (e.code().value() == static_cast<int>(vk::Result::eErrorOutOfDateKHR)) {
-                recreateSwapChain();
+	            int width = 0, height = 0;
+	            glfwGetFramebufferSize(window, &width, &height);
+	            while (width == 0 || height == 0) {
+	                glfwGetFramebufferSize(window, &width, &height);
+	                glfwWaitEvents();
+	            }
+	            swapchainManager.recreateSwapChain(context, width, height);
+
+	            computeScreen.resize(context.getAllocator(), context.getDevice(), context.getGraphicsQueueIndex(), swapchainManager.getSwapChainExtent().width, swapchainManager.getSwapChainExtent().height);
             }
         }
 

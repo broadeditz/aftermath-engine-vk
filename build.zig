@@ -30,6 +30,9 @@ pub fn build(b: *std.Build) void {
 
             "src/uniforms/frame.cpp",
             "src/uniforms/render.cpp",
+
+            "src/vulkan/context.cpp",
+            "src/vulkan/swapchain.cpp",
         },
         .flags = &.{
             "-std=c++23",
@@ -214,13 +217,15 @@ fn generateCompileCommands(b: *std.Build, target: std.Build.ResolvedTarget) !voi
 
     const sources = [_][]const u8{
         "src/main.cpp",
+        "src/camera/camera.cpp",
         "src/screen/computescreen.cpp",
-        "src/uniforms/frame.cpp",
-        "src/uniforms/render.cpp",
         "src/tree/tree.cpp",
         "src/tree/tree_stale.cpp",
         "src/tree/tree_util.cpp",
-        "src/camera/camera.cpp",
+        "src/uniforms/frame.cpp",
+        "src/uniforms/render.cpp",
+        "src/vulkan/context.cpp",
+        "src/vulkan/swapchain.cpp",
     };
 
     var compile_commands = try std.ArrayList(u8).initCapacity(b.allocator, 4096);
