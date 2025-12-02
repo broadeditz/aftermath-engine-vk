@@ -49,16 +49,6 @@ const std::vector<Vertex> vertices = {
 
 const std::vector<uint16_t> indices = { 0, 1, 2, 2, 3, 0 };
 
-static std::vector<char> readFile(const std::string& filename) {
-    std::ifstream file(filename, std::ios::ate | std::ios::binary);
-    if (!file.is_open()) throw std::runtime_error("failed to open file: " + filename);
-
-    std::vector<char> buffer(file.tellg());
-    file.seekg(0);
-    file.read(buffer.data(), buffer.size());
-    return buffer;
-}
-
 const bool dev = true;
 const std::vector<char const*> validationLayers = { "VK_LAYER_KHRONOS_validation" };
 constexpr int MAX_FRAMES_IN_FLIGHT = 1;
