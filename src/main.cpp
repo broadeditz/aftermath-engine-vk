@@ -18,6 +18,7 @@
 
 #include "camera/camera.hpp"
 #include "screen/computescreen.hpp"
+#include "vulkan/context.hpp"
 
 VULKAN_HPP_DEFAULT_DISPATCH_LOADER_DYNAMIC_STORAGE
 
@@ -76,17 +77,8 @@ public:
     GLFWwindow* window;
 
 private:
-    vk::raii::Context context;
-    vk::raii::Instance instance = nullptr;
-    vk::raii::SurfaceKHR surface = nullptr;
-    vk::raii::PhysicalDevice physicalDevice = nullptr;
-    vk::raii::Device device = nullptr;
-    VmaAllocator allocator = nullptr;
-
-    vk::raii::Queue graphicsQueue = nullptr;
-    vk::raii::Queue presentQueue = nullptr;
-    uint32_t graphicsIndex;
-    uint32_t presentIndex;
+	VulkanContext context;
+	vk::raii::SurfaceKHR surface = nullptr;
 
     vk::raii::SwapchainKHR swapChain = nullptr;
     std::vector<vk::Image> swapChainImages;
@@ -143,21 +135,19 @@ private:
 
     void cleanup() {
         cleanupSwapChain();
-        computeScreen.destroy(allocator);
-        vmaDestroyAllocator(allocator);
+        computeScreen.destroy(context.getAllocator());
+        vmaDestroyAllocator(context.getAllocator());
         glfwDestroyWindow(window);
         glfwTerminate();
     }
 
     void initVulkan() {
 		std::cout << "creating Vulkan instance" << std::endl;
-        createInstance();
+		context.createInstance(dev);
 		std::cout << "creating window surface" << std::endl;
         createSurface();
-		std::cout << "picking physical device" << std::endl;
-        pickPhysicalDevice();
-		std::cout << "creating logical device" << std::endl;
-        createLogicalDevice();
+		std::cout << "initializing context" << std::endl;
+		context.init(*surface);
 		std::cout << "creating swap chain" << std::endl;
         createSwapChain();
 		std::cout << "creating image views" << std::endl;
@@ -170,7 +160,7 @@ private:
         createCommandBuffers();
 		std::cout << "creating compute screen" << std::endl;
         // TODO: initialTransition on computeScreen
-        computeScreen.create(allocator, device, graphicsIndex, swapChainExtent.width, swapChainExtent.height);
+        computeScreen.create(context.getAllocator(), context.getDevice(), context.getGraphicsQueueIndex(), swapChainExtent.width, swapChainExtent.height);
 		std::cout << "creating compute pipeline" << std::endl;
         createComputePipeline();
 		std::cout << "creating graphics pipeline" << std::endl;
@@ -184,113 +174,18 @@ private:
         camera = FPSCamera(window);
     }
 
-    void createInstance() {
-        // *** FIRST: Initialize with vkGetInstanceProcAddr ***
-        VULKAN_HPP_DEFAULT_DISPATCHER.init(context.getDispatcher()->vkGetInstanceProcAddr);
-
-        vk::ApplicationInfo appInfo{
-            .pApplicationName = "Eldritch Aftermath",
-            .applicationVersion = VK_MAKE_VERSION(0, 0, 1),
-            .pEngineName = "Aftermath Engine",
-            .engineVersion = VK_MAKE_VERSION(0, 0, 1),
-            .apiVersion = vk::ApiVersion14
-        };
-
-        std::vector<char const*> requiredLayers;
-        if (dev) requiredLayers = validationLayers;
-
-        uint32_t glfwExtensionCount = 0;
-        auto glfwExtensions = glfwGetRequiredInstanceExtensions(&glfwExtensionCount);
-
-        vk::InstanceCreateInfo createInfo{
-            .pApplicationInfo = &appInfo,
-            .enabledLayerCount = static_cast<uint32_t>(requiredLayers.size()),
-            .ppEnabledLayerNames = requiredLayers.data(),
-            .enabledExtensionCount = glfwExtensionCount,
-            .ppEnabledExtensionNames = glfwExtensions,
-        };
-
-        instance = vk::raii::Instance(context, createInfo);
-
-        // *** THEN: Initialize with the instance ***
-        VULKAN_HPP_DEFAULT_DISPATCHER.init(*instance);
-    }
-
     void createSurface() {
         VkSurfaceKHR _surface;
-        if (glfwCreateWindowSurface(*instance, window, nullptr, &_surface) != VK_SUCCESS) {
+        if (glfwCreateWindowSurface(*context.getInstance(), window, nullptr, &_surface) != VK_SUCCESS) {
             throw std::runtime_error("failed to create window surface!");
         }
-        surface = vk::raii::SurfaceKHR(instance, _surface);
-    }
-
-    void pickPhysicalDevice() {
-        auto devices = instance.enumeratePhysicalDevices();
-        if (devices.empty()) throw std::runtime_error("no Vulkan GPUs found!");
-        physicalDevice = std::move(devices[0]);
-        std::cout << "Using: " << physicalDevice.getProperties().deviceName << std::endl;
-    }
-
-    void createLogicalDevice() {
-        auto queueFamilyProperties = physicalDevice.getQueueFamilyProperties();
-
-        graphicsIndex = 0;
-        for (size_t i = 0; i < queueFamilyProperties.size(); i++) {
-            if (queueFamilyProperties[i].queueFlags & vk::QueueFlagBits::eGraphics) {
-                graphicsIndex = i;
-                break;
-            }
-        }
-
-        presentIndex = physicalDevice.getSurfaceSupportKHR(graphicsIndex, *surface) ? graphicsIndex : graphicsIndex;
-
-        vk::PhysicalDeviceVulkan12Features vulkan12Features{
-            .shaderInt8 = vk::True,
-            .uniformAndStorageBuffer8BitAccess = vk::True,
-            .storageBuffer8BitAccess = vk::True
-        };
-
-        vk::PhysicalDeviceVulkan13Features vulkan13Features{
-            .pNext = &vulkan12Features,
-            .synchronization2 = vk::True,
-            .dynamicRendering = vk::True
-        };
-
-        float queuePriority = 1.0f;
-        vk::DeviceQueueCreateInfo queueCreateInfo{
-            .queueFamilyIndex = graphicsIndex,
-            .queueCount = 1,
-            .pQueuePriorities = &queuePriority
-        };
-
-        vk::DeviceCreateInfo deviceCreateInfo{
-            .pNext = &vulkan13Features,
-            .queueCreateInfoCount = 1,
-            .pQueueCreateInfos = &queueCreateInfo,
-            .enabledExtensionCount = static_cast<uint32_t>(deviceExtensions.size()),
-            .ppEnabledExtensionNames = deviceExtensions.data()
-        };
-
-        device = vk::raii::Device(physicalDevice, deviceCreateInfo);
-
-		VULKAN_HPP_DEFAULT_DISPATCHER.init(*device);
-
-        graphicsQueue = vk::raii::Queue(device, graphicsIndex, 0);
-        presentQueue = graphicsQueue;
-
-        VmaAllocatorCreateInfo allocatorInfo{
-            .physicalDevice = *physicalDevice,
-            .device = *device,
-            .instance = *instance,
-            .vulkanApiVersion = VK_API_VERSION_1_4
-        };
-        vmaCreateAllocator(&allocatorInfo, &allocator);
+        surface = vk::raii::SurfaceKHR(context.getInstance(), _surface);
     }
 
     void createSwapChain() {
-        auto capabilities = physicalDevice.getSurfaceCapabilitiesKHR(*surface);
-        auto formats = physicalDevice.getSurfaceFormatsKHR(*surface);
-        auto presentModes = physicalDevice.getSurfacePresentModesKHR(*surface);
+        auto capabilities = context.getPhysicalDevice().getSurfaceCapabilitiesKHR(*surface);
+        auto formats = context.getPhysicalDevice().getSurfaceFormatsKHR(*surface);
+        auto presentModes = context.getPhysicalDevice().getSurfacePresentModesKHR(*surface);
 
         swapChainSurfaceFormat = formats[0];
         for (const auto& format : formats) {
@@ -326,7 +221,7 @@ private:
             .clipped = vk::True
         };
 
-        swapChain = device.createSwapchainKHR(createInfo);
+        swapChain = context.getDevice().createSwapchainKHR(createInfo);
         swapChainImages = swapChain.getImages();
     }
 
@@ -338,11 +233,11 @@ private:
             glfwWaitEvents();
         }
 
-        device.waitIdle();
+        context.getDevice().waitIdle();
         cleanupSwapChain();
         createSwapChain();
         createImageViews();
-        computeScreen.resize(allocator, device, graphicsIndex, swapChainExtent.width, swapChainExtent.height);
+        computeScreen.resize(context.getAllocator(), context.getDevice(), context.getGraphicsQueueIndex(), swapChainExtent.width, swapChainExtent.height);
     }
 
     void cleanupSwapChain() {
@@ -359,7 +254,7 @@ private:
                 .format = swapChainSurfaceFormat.format,
                 .subresourceRange = { vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1 }
             };
-            swapChainImageViews.emplace_back(device, createInfo);
+            swapChainImageViews.emplace_back(context.getDevice(), createInfo);
         }
     }
 
@@ -369,7 +264,7 @@ private:
             .codeSize = shaderCode.size(),
             .pCode = reinterpret_cast<const uint32_t*>(shaderCode.data())
         };
-        vk::raii::ShaderModule shaderModule(device, createInfo);
+        vk::raii::ShaderModule shaderModule(context.getDevice(), createInfo);
 
         vk::ComputePipelineCreateInfo pipelineInfo{
             .stage = {
@@ -380,7 +275,7 @@ private:
             .layout = *computeScreen.computePipelineLayout
         };
 
-        computePipeline = vk::raii::Pipeline(device, nullptr, pipelineInfo);
+        computePipeline = vk::raii::Pipeline(context.getDevice(), nullptr, pipelineInfo);
     }
 
     void createGraphicsPipeline() {
@@ -389,7 +284,7 @@ private:
             .codeSize = shaderCode.size(),
             .pCode = reinterpret_cast<const uint32_t*>(shaderCode.data())
         };
-        vk::raii::ShaderModule shaderModule(device, createInfo);
+        vk::raii::ShaderModule shaderModule(context.getDevice(), createInfo);
 
         vk::PipelineShaderStageCreateInfo shaderStages[] = {
             {.stage = vk::ShaderStageFlagBits::eVertex, .module = *shaderModule, .pName = "vertMain" },
@@ -462,14 +357,14 @@ private:
             .layout = *computeScreen.graphicsPipelineLayout
         };
 
-        graphicsPipeline = vk::raii::Pipeline(device, nullptr, pipelineInfo);
+        graphicsPipeline = vk::raii::Pipeline(context.getDevice(), nullptr, pipelineInfo);
     }
 
     void createVertexBuffer() {
         vk::DeviceSize bufferSize = sizeof(vertices[0]) * vertices.size();
 
         vk::BufferCreateInfo bufferInfo{ .size = bufferSize, .usage = vk::BufferUsageFlagBits::eVertexBuffer };
-        vertexBuffer = vk::raii::Buffer(device, bufferInfo);
+        vertexBuffer = vk::raii::Buffer(context.getDevice(), bufferInfo);
 
         auto memReq = vertexBuffer.getMemoryRequirements();
         vk::MemoryAllocateInfo allocInfo{
@@ -477,7 +372,7 @@ private:
             .memoryTypeIndex = findMemoryType(memReq.memoryTypeBits,
                 vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent)
         };
-        vertexBufferMemory = vk::raii::DeviceMemory(device, allocInfo);
+        vertexBufferMemory = vk::raii::DeviceMemory(context.getDevice(), allocInfo);
         vertexBuffer.bindMemory(*vertexBufferMemory, 0);
 
         void* data = vertexBufferMemory.mapMemory(0, bufferSize);
@@ -489,7 +384,7 @@ private:
         vk::DeviceSize bufferSize = sizeof(indices[0]) * indices.size();
 
         vk::BufferCreateInfo bufferInfo{ .size = bufferSize, .usage = vk::BufferUsageFlagBits::eIndexBuffer };
-        indexBuffer = vk::raii::Buffer(device, bufferInfo);
+        indexBuffer = vk::raii::Buffer(context.getDevice(), bufferInfo);
 
         auto memReq = indexBuffer.getMemoryRequirements();
         vk::MemoryAllocateInfo allocInfo{
@@ -497,7 +392,7 @@ private:
             .memoryTypeIndex = findMemoryType(memReq.memoryTypeBits,
                 vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent)
         };
-        indexBufferMemory = vk::raii::DeviceMemory(device, allocInfo);
+        indexBufferMemory = vk::raii::DeviceMemory(context.getDevice(), allocInfo);
         indexBuffer.bindMemory(*indexBufferMemory, 0);
 
         void* data = indexBufferMemory.mapMemory(0, bufferSize);
@@ -506,7 +401,7 @@ private:
     }
 
     uint32_t findMemoryType(uint32_t typeFilter, vk::MemoryPropertyFlags properties) {
-        auto memProperties = physicalDevice.getMemoryProperties();
+        auto memProperties = context.getPhysicalDevice().getMemoryProperties();
         for (uint32_t i = 0; i < memProperties.memoryTypeCount; i++) {
             if ((typeFilter & (1 << i)) && (memProperties.memoryTypes[i].propertyFlags & properties) == properties) {
                 return i;
@@ -518,17 +413,17 @@ private:
     void createTransferCommandPool() {
         vk::CommandPoolCreateInfo poolInfo{
             .flags = vk::CommandPoolCreateFlagBits::eTransient,  // Optimized for short-lived buffers
-            .queueFamilyIndex = graphicsIndex
+            .queueFamilyIndex = context.getGraphicsQueueIndex()
         };
-        transferCommandPool = vk::raii::CommandPool(device, poolInfo);
+        transferCommandPool = vk::raii::CommandPool(context.getDevice(), poolInfo);
     }
 
     void createCommandPool() {
         vk::CommandPoolCreateInfo poolInfo{
             .flags = vk::CommandPoolCreateFlagBits::eResetCommandBuffer,
-            .queueFamilyIndex = graphicsIndex
+            .queueFamilyIndex = context.getGraphicsQueueIndex()
         };
-        commandPool = vk::raii::CommandPool(device, poolInfo);
+        commandPool = vk::raii::CommandPool(context.getDevice(), poolInfo);
     }
 
     void createCommandBuffers() {
@@ -537,7 +432,7 @@ private:
             .level = vk::CommandBufferLevel::ePrimary,
             .commandBufferCount = MAX_FRAMES_IN_FLIGHT
         };
-        commandBuffers = vk::raii::CommandBuffers(device, allocInfo);
+        commandBuffers = vk::raii::CommandBuffers(context.getDevice(), allocInfo);
     }
 
     void recordCommandBuffer(uint32_t imageIndex) {
@@ -608,22 +503,22 @@ private:
 
     void createSyncObjects() {
         for (size_t i = 0; i < swapChainImages.size(); i++) {
-            presentCompleteSemaphores.emplace_back(device, vk::SemaphoreCreateInfo{});
-            renderFinishedSemaphores.emplace_back(device, vk::SemaphoreCreateInfo{});
+            presentCompleteSemaphores.emplace_back(context.getDevice(), vk::SemaphoreCreateInfo{});
+            renderFinishedSemaphores.emplace_back(context.getDevice(), vk::SemaphoreCreateInfo{});
         }
         for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
-            inFlightFences.emplace_back(device, vk::FenceCreateInfo{ .flags = vk::FenceCreateFlagBits::eSignaled });
+            inFlightFences.emplace_back(context.getDevice(), vk::FenceCreateInfo{ .flags = vk::FenceCreateFlagBits::eSignaled });
         }
     }
 
     void drawFrame() {
-        device.waitForFences(*inFlightFences[currentFrame], vk::True, UINT64_MAX);
+        context.getDevice().waitForFences(*inFlightFences[currentFrame], vk::True, UINT64_MAX);
 
         auto [result, imageIndex] = swapChain.acquireNextImage(UINT64_MAX, *presentCompleteSemaphores[semaphoreIndex], nullptr);
         if (result == vk::Result::eErrorOutOfDateKHR || framebufferResized) {
             framebufferResized = false;
             recreateSwapChain();
-            presentCompleteSemaphores[semaphoreIndex] = vk::raii::Semaphore(device, vk::SemaphoreCreateInfo{});
+            presentCompleteSemaphores[semaphoreIndex] = vk::raii::Semaphore(context.getDevice(), vk::SemaphoreCreateInfo{});
             return;
         }
 
@@ -633,6 +528,12 @@ private:
         float time = std::chrono::duration<float>(currentTime - startTime).count();
 
         camera.update(deltaTime);
+
+        computeScreen.treeManager.moveObserver({
+            camera.getPosition().x,
+            camera.getPosition().y,
+            camera.getPosition().z,
+        });
 
         if (lastSecond + std::chrono::seconds(1) <= std::chrono::steady_clock::now()) {
             std::cout << "FPS: " << frameCounter << std::endl;
@@ -646,12 +547,11 @@ private:
             .aperture = 0.001,
             .focusDistance = 3.5,
             .fov = 1.5,
-            // TODO: pass position & direction from FPS controls
             .cameraPosition = camera.getPosition(),
             .cameraDirection = camera.getDirection(),
         });
 
-        device.resetFences(*inFlightFences[currentFrame]);
+        context.getDevice().resetFences(*inFlightFences[currentFrame]);
         commandBuffers[currentFrame].reset();
         recordCommandBuffer(imageIndex);
 
@@ -665,7 +565,7 @@ private:
             .signalSemaphoreCount = 1,
             .pSignalSemaphores = &*renderFinishedSemaphores[semaphoreIndex]
         };
-        graphicsQueue.submit(submitInfo, *inFlightFences[currentFrame]);
+        context.getGraphicsQueue().submit(submitInfo, *inFlightFences[currentFrame]);
 
         vk::PresentInfoKHR presentInfo{
             .waitSemaphoreCount = 1,
@@ -676,7 +576,7 @@ private:
         };
 
         try {
-            result = presentQueue.presentKHR(presentInfo);
+            result = context.getPresentQueue().presentKHR(presentInfo);
             if (result == vk::Result::eErrorOutOfDateKHR || result == vk::Result::eSuboptimalKHR || framebufferResized) {
                 framebufferResized = false;
                 recreateSwapChain();
@@ -699,7 +599,7 @@ private:
             glfwPollEvents();
             drawFrame();
         }
-        device.waitIdle();
+        context.getDevice().waitIdle();
 		std::cout << "Main loop exited" << std::endl;
     }
 };
