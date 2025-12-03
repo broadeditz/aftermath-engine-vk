@@ -5,8 +5,8 @@ It is designed to simulate stupendously large and detailed destructable environm
 
 ### Please note:
 This project is still in early development. Many features are incomplete or missing, and there may be bugs and performance issues. Try at your own risk!  
-If you're new to game development, and wondering if this is a good project to learn from, the answer is definitely no. The codebase is not well documented yet.  
-Especially the `main.cpp` is messy, because I use it like a sketchpad, before extracting functionality into their own files.  
+Don't expect it to compile out of the box, and don't expect the `main` branch to be stable yet, as it is still under active development.  
+If you're new to game development, and wondering if this is a good project to learn from, the answer is definitely no.  
 However, if you're experienced with C++ and graphics programming, feel free to explore and contribute!  
 
 ## Features
@@ -17,12 +17,14 @@ However, if you're experienced with C++ and graphics programming, feel free to e
 
 ## TODO/bug list
 
-- [ ] Implement dynamic lighting and shadows.
+- [x] Implement dynamic lighting and shadows. (Global, dynamic sunlight works.)
+  - [ ] Implement a data structure to pass light sources to the shader.
 - [x] Implement sparse signed distance field 64tree support for efficient voxel data management. (Early, naive, implementation done)
 	- [ ] Implement dynamic voxel destruction
 	- [ ] Implement dynamic voxel construction
 - [ ] Add foveated rendering for performance optimization, focussing compute on the center of the screen.
-- [ ] Fix destructors of uniform buffer classes to prevent memory leaks.
+- [ ] Fix destructors of all classes to prevent memory leaks & ensure proper shutdown.
+- [ ] Make `mise install` & `zig build run` work on clean machines, currently only builds on my personal Windows partition.
 
 
 ## Trademark & Distribution Guidelines
@@ -44,4 +46,4 @@ When distributing modified versions, you must:
 The official version is not yet available, but will be on Steam.
 
 ### Why This Matters
-These guidelines protect players from confusion about which version they're downloading and ensure the official release maintains its reputation. We encourage community modifications and forks—just make it clear they're community versions!
+These guidelines protect players from confusion about which version they're downloading and ensure the official release maintains its reputation. We encourage community modifications and forksï¿½just make it clear they're community versions!
