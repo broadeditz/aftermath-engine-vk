@@ -1,59 +1,6 @@
-# mise.toml - Task runner configuration for CMake project
-
-[tasks.configure-debug]
-description = "Configure Clang Debug build"
-run = "cmake --preset clang-debug"
-
-[tasks.configure-test]
-description = "Configure Clang Test build"
-run = "cmake --preset clang-test"
-
-[tasks.configure-release]
-description = "Configure Clang Release build"
-run = "cmake --preset clang-release"
-
-[tasks.build-debug]
-description = "Build Clang Debug"
-run = "cmake --build --preset clang-debug"
-depends = ["configure-debug"]
-
-[tasks.build-test]
-description = "Build Clang Test"
-run = "cmake --build --preset clang-test"
-depends = ["configure-test"]
-
-[tasks.build-release]
-description = "Build Clang Release"
-run = "cmake --build --preset clang-release"
-depends = ["configure-release"]
-
-[tasks.test]
-description = "Run tests"
-run = "ctest --preset clang-test"
-depends = ["build-test"]
-
-[tasks.run-debug]
-description = "Run debug executable"
-run = "cmake --build build --target run"
-depends = ["build-debug"]
-
-[tasks.run-release]
-description = "Run release executable"
-run = "cmake --build build --target run"
-depends = ["build-release"]
-
-# Convenience aliases
-[tasks.debug]
-alias = "build-debug"
-
-[tasks.release]
-alias = "build-release"
-
-[tasks.build]
-alias = "build-debug"
-
 [tasks.run]
-alias = "run-debug"
+description = "Compile & run debug executable and shaders"
+run = "zig build run"
 
 # Tools configuration
 [tools]
