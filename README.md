@@ -46,4 +46,4 @@ When distributing modified versions, you must:
 The official version is not yet available, but will be on Steam.
 
 ### Why This Matters
-These guidelines protect players from confusion about which version they're downloading and ensure the official release maintains its reputation. We encourage community modifications and forks�just make it clear they're community versions!
+These guidelines protect players from confusion about which version they're downloading and ensure the official release maintains its reputation. We encourage community modifications and forks, just make it clear they're community versions!
