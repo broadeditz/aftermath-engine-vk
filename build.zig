@@ -34,6 +34,7 @@ pub fn build(b: *std.Build) void {
             "src/vulkan/context.cpp",
             "src/vulkan/pipeline.cpp",
             "src/vulkan/swapchain.cpp",
+            "src/vulkan/sync.cpp",
         },
         .flags = &.{
             "-std=c++23",
@@ -92,6 +93,7 @@ pub fn build(b: *std.Build) void {
     exe.addLibraryPath(.{ .cwd_relative = b.fmt("{s}/include", .{vcpkg_path}) });
     exe.addLibraryPath(.{ .cwd_relative = b.fmt("{s}/bin", .{vcpkg_path}) });
 
+    // TODO: ensure all files are installed on other OSes
     if (target.result.os.tag == .windows) {
         const install_dll = b.addInstallFile(.{ .cwd_relative = b.fmt("vcpkg_installed/{s}/bin/glfw3.dll", .{vcpkg_triplet}) }, "bin/glfw3.dll");
 
@@ -228,6 +230,7 @@ fn generateCompileCommands(b: *std.Build, target: std.Build.ResolvedTarget) !voi
         "src/vulkan/context.cpp",
         "src/vulkan/pipeline.cpp",
         "src/vulkan/swapchain.cpp",
+        "src/vulkan/sync.cpp",
     };
 
     var compile_commands = try std.ArrayList(u8).initCapacity(b.allocator, 4096);

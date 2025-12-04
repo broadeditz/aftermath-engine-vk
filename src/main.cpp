@@ -18,6 +18,7 @@
 #include "vulkan/context.hpp"
 #include "vulkan/pipeline.hpp"
 #include "vulkan/swapchain.hpp"
+#include "vulkan/sync.hpp"
 
 VULKAN_HPP_DEFAULT_DISPATCH_LOADER_DYNAMIC_STORAGE
 
@@ -86,13 +87,9 @@ private:
 
     vk::raii::CommandPool transferCommandPool = nullptr;
 
-    std::vector<vk::raii::Semaphore> presentCompleteSemaphores;
-    std::vector<vk::raii::Semaphore> renderFinishedSemaphores;
-    std::vector<vk::raii::Fence> inFlightFences;
+    SyncObjects syncObjects;
 
     bool framebufferResized = false;
-    uint32_t currentFrame = 0;
-    uint32_t semaphoreIndex = 0;
 
     FPSCamera camera = nullptr;
 
@@ -153,7 +150,7 @@ private:
 		std::cout << "creating index buffer" << std::endl;
         createIndexBuffer();
 		std::cout << "creating synchronization objects" << std::endl;
-        createSyncObjects();
+        syncObjects.create(context, swapchainManager.getSwapChainImages().size(), MAX_FRAMES_IN_FLIGHT);
         camera = FPSCamera(window);
     }
 
@@ -233,7 +230,8 @@ private:
     }
 
     void recordCommandBuffer(uint32_t imageIndex) {
-        commandBuffers[currentFrame].begin({});
+    	int currentFrame = syncObjects.getCurrentFrame();
+    	commandBuffers[currentFrame].begin({});
 
         // Run compute shader
         computeScreen.recordCompute(commandBuffers[currentFrame], renderPipeline.getComputePipeline());
@@ -300,20 +298,15 @@ private:
         commandBuffers[currentFrame].end();
     }
 
-    void createSyncObjects() {
-        for (size_t i = 0; i < swapchainManager.getSwapChainImages().size(); i++) {
-            presentCompleteSemaphores.emplace_back(context.getDevice(), vk::SemaphoreCreateInfo{});
-            renderFinishedSemaphores.emplace_back(context.getDevice(), vk::SemaphoreCreateInfo{});
-        }
-        for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
-            inFlightFences.emplace_back(context.getDevice(), vk::FenceCreateInfo{ .flags = vk::FenceCreateFlagBits::eSignaled });
-        }
-    }
-
     void drawFrame() {
-        context.getDevice().waitForFences(*inFlightFences[currentFrame], vk::True, UINT64_MAX);
+   	    const vk::raii::Fence& fence = syncObjects.getCurrentFence();
+        const vk::raii::Semaphore& presentSemaphore = syncObjects.getCurrentPresentSemaphore();
 
-        auto [result, imageIndex] = swapchainManager.getSwapChain().acquireNextImage(UINT64_MAX, *presentCompleteSemaphores[semaphoreIndex], nullptr);
+        int currentFrame = syncObjects.getCurrentFrame();
+
+        context.getDevice().waitForFences(*fence, vk::True, UINT64_MAX);
+
+        auto [result, imageIndex] = swapchainManager.getSwapChain().acquireNextImage(UINT64_MAX, *presentSemaphore, nullptr);
         if (result == vk::Result::eErrorOutOfDateKHR || framebufferResized) {
             framebufferResized = false;
 
@@ -326,7 +319,8 @@ private:
             swapchainManager.recreateSwapChain(context, width, height);
 
             computeScreen.resize(context.getAllocator(), context.getDevice(), context.getGraphicsQueueIndex(), swapchainManager.getSwapChainExtent().width, swapchainManager.getSwapChainExtent().height);
-            presentCompleteSemaphores[semaphoreIndex] = vk::raii::Semaphore(context.getDevice(), vk::SemaphoreCreateInfo{});
+            // TODO: reset semaphore in syncObjects
+            //presentCompleteSemaphores[semaphoreIndex] = vk::raii::Semaphore(context.getDevice(), vk::SemaphoreCreateInfo{});
             return;
         }
 
@@ -359,27 +353,29 @@ private:
             .cameraDirection = camera.getDirection(),
         });
 
-        context.getDevice().resetFences(*inFlightFences[currentFrame]);
+        context.getDevice().resetFences(*fence);
         commandBuffers[currentFrame].reset();
         recordCommandBuffer(imageIndex);
+
+        const vk::raii::Semaphore& renderSemaphore = syncObjects.getCurrentRenderSemaphore();
 
         vk::PipelineStageFlags waitStage = vk::PipelineStageFlagBits::eColorAttachmentOutput;
         vk::SubmitInfo submitInfo{
             .waitSemaphoreCount = 1,
-            .pWaitSemaphores = &*presentCompleteSemaphores[semaphoreIndex],
+            .pWaitSemaphores = &*presentSemaphore,
             .pWaitDstStageMask = &waitStage,
             .commandBufferCount = 1,
             .pCommandBuffers = &*commandBuffers[currentFrame],
             .signalSemaphoreCount = 1,
-            .pSignalSemaphores = &*renderFinishedSemaphores[semaphoreIndex]
+            .pSignalSemaphores = &*renderSemaphore,
         };
-        context.getGraphicsQueue().submit(submitInfo, *inFlightFences[currentFrame]);
+        context.getGraphicsQueue().submit(submitInfo, *fence);
 
         const vk::raii::SwapchainKHR& swapChain = swapchainManager.getSwapChain();
 
         vk::PresentInfoKHR presentInfo{
             .waitSemaphoreCount = 1,
-            .pWaitSemaphores = &*renderFinishedSemaphores[semaphoreIndex],
+            .pWaitSemaphores = &*renderSemaphore,
             .swapchainCount = 1,
             .pSwapchains = &*swapChain,
             .pImageIndices = &imageIndex
@@ -414,8 +410,8 @@ private:
             }
         }
 
-        semaphoreIndex = (semaphoreIndex + 1) % presentCompleteSemaphores.size();
-        currentFrame = (currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
+        syncObjects.nextFrame();
+        syncObjects.nextSemaphore();
         frameCounter++;
         lastTime = currentTime;
     }
