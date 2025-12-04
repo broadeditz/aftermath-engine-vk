@@ -4,6 +4,4 @@ run = "zig build run"
 
 # Tools configuration
 [tools]
-cmake = "latest"
-ninja = "latest"
 zig = "0.15.2"
