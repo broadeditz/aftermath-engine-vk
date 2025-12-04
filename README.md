@@ -10,9 +10,12 @@ If you're new to game development, and wondering if this is a good project to le
 However, if you're experienced with C++ and graphics programming, feel free to explore and contribute!  
 
 ## Features
-- Ray Marching: Utilizes ray marching techniques for rendering complex 3D scenes.
-- Ray projection onto variable aperture surface, for depth of field and bokeh effects.
-- Powerful voxel LODs thanks to a sparse distance field 64tree
+- Ray Marching: Utilizes ray marching techniques for rendering complex 3D scenes.  
+  <img src="./screenshots/shadows.png" width="500" />
+- Ray projection onto variable aperture surface, for depth of field and bokeh effects.  
+  <img src="./screenshots/bokeh.png" width="500" />
+- Powerful voxel LODs thanks to a sparse distance field 64tree  
+  <img src="./screenshots/LODs.png" width="500" />
 
 
 ## TODO/bug list
