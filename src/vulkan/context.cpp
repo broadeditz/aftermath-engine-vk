@@ -1,4 +1,5 @@
 #include "context.hpp"
+#include "vulkan/vulkan.hpp"
 
 #include <iostream>
 #include <GLFW/glfw3.h>
@@ -97,10 +98,14 @@ void VulkanContext::createLogicalDevice() {
 
     presentIndex = graphicsIndex;
 
+    vk::PhysicalDeviceFeatures deviceFeatures {
+    	.shaderInt64 = vk::True,
+    };
+
     vk::PhysicalDeviceVulkan12Features vulkan12Features{
-        .shaderInt8 = vk::True,
+    	.storageBuffer8BitAccess = vk::True,
         .uniformAndStorageBuffer8BitAccess = vk::True,
-        .storageBuffer8BitAccess = vk::True
+        .shaderInt8 = vk::True,
     };
 
     vk::PhysicalDeviceVulkan13Features vulkan13Features{
@@ -121,7 +126,8 @@ void VulkanContext::createLogicalDevice() {
         .queueCreateInfoCount = 1,
         .pQueueCreateInfos = &queueCreateInfo,
         .enabledExtensionCount = static_cast<uint32_t>(deviceExtensions.size()),
-        .ppEnabledExtensionNames = deviceExtensions.data()
+        .ppEnabledExtensionNames = deviceExtensions.data(),
+        .pEnabledFeatures = &deviceFeatures,
     };
 
     device = vk::raii::Device(physicalDevice, deviceCreateInfo);
