@@ -1,11 +1,16 @@
 module tree;
 
 public struct TreeNode {
+  uint64_t childMask; // 64-bit mask of child nodes, each bit represents a child
+                      // node, 0 means the child is coalesced with neighboring
+                      // 0s, 1 means the child is a standalone leaf.
   // 32-bit index to first child in the buffer, all 64 children are guaranteed
   // to be contiguously indexed. If LEAF_FLAG is set, it means this is a leaf
   // node, and contains the index for the leaf data instead. If it is a leaf
   // node, it only has 1 leaf data node, not 64.
   uint childPointer;
+  uint padding; // 32 bits padding to ensure alignment, can be used for future
+                // purposes.
 }
 
 public struct TreeLeaf {

@@ -23,15 +23,17 @@ enum class MaterialType : uint8_t {
 
 // Tree node structure - must match shader definition
 struct TreeNode {
+	uint64_t childMask; // Bitmask of child pointers, it contains data pertaining to coalesced leaves.
     uint32_t childPointer; // Pointer to first child, if LEAF_NODE_FLAG is set, it means it's a leaf node, and contains the index for the leaf data.
+    uint32_t padding; // Padding to align the structure to 16 bytes, can be used for any purpose in the future.
 };
 
 struct TreeLeaf {
-    float distance; // Distance from block center to nearest surface, can be negative
+    float distance; // Distance from block center to nearest surface, can be negative if the block is inside of the geometry.
     MaterialType material;
     uint8_t damage; // damage to the block, 0-255
     uint8_t flags;
-    // 8 bits of padding left
+    uint8_t padding; // 8 bits of padding left
 };
 
 template<typename T>
