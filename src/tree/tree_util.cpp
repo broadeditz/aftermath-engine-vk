@@ -34,8 +34,14 @@ void TreeManager::countNodesAtDepth(uint32_t nodeIndex, int depth,
     uint32_t childPointer = nodes[nodeIndex].childPointer;
 
     if (childPointer & LEAF_NODE_FLAG) {
-        // This is a leaf
-        leavesPerLevel[depth]++;
+        if (nodes[nodeIndex].childMask == 0) {
+	        // This is a sparsity leaf
+	        leavesPerLevel[depth]++;
+        } else {
+            // This is a regular leaf
+            // TODO: actully count mask
+            leavesPerLevel[depth + 1] += 64;
+        }
     }
     else if (childPointer != 0) {
         // Has children - recurse into all 64 children

@@ -3,6 +3,7 @@
 
 #include <cmath>
 #include <glm/glm.hpp>
+#include <shared_mutex>
 #include <thread>
 #include <mutex>
 
@@ -192,17 +193,14 @@ float getLipschitzBound(float centerDistance, float voxelSize) {
     return (centerDistance >= 0 ? 1.0f : -1.0f) * fmax(conservativeMagnitude, voxelSize * minStep * 0.01);
 }
 
-uint32_t TreeManager::createLeaf(float distance, bool lod) {
+// TODO: update name & fingerprint to reflect the fact that this now is only supposed to be used for sparsity leaves
+uint32_t TreeManager::createLeaf(float distance) {
     MaterialType material = MaterialType::Void;
     if (distance < 0.00) {
         material = MaterialType::Grass;
     }
 
     uint8_t flags = 0;
-
-    if (lod) {
-        flags = 1;
-    }
 
     TreeLeaf leaf = {
         .distance = distance,
@@ -216,6 +214,40 @@ uint32_t TreeManager::createLeaf(float distance, bool lod) {
     leaves.push_back(leaf);
 
     return leafPointer;
+}
+
+void TreeManager::createLeaves(uint32_t parentIndex, int depth, vec3 parentPosition) {
+	float voxelSize = getVoxelSizeAtDepth(depth);
+
+	std::vector<TreeLeaf> newLeaves;
+	newLeaves.reserve(64);
+	for (uint32_t i = 0; i < 64; i++) {
+        vec3 childPosition = getChunkPosition(i, voxelSize, parentPosition);
+        float distance = sampleDistanceAt(childPosition);
+        if (abs(distance) < voxelSize * minStep) {
+            distance = (distance >= 0 ? 1.0f : -1.0f) * voxelSize * minStep;
+        }
+
+        TreeLeaf leaf = {
+            .distance = distance,
+            .material = distance < 0 ? MaterialType::Dirt : MaterialType::Void,
+            .damage = 0,
+            .flags = 1,
+        };
+
+        newLeaves.push_back(leaf);
+    }
+
+	uint32_t leafPointer = 0;
+	{
+		std::lock_guard<std::mutex> lock(leavesMutex);
+		leafPointer = leaves.size();
+		leaves.insert(leaves.end(), newLeaves.begin(), newLeaves.end());
+	}
+
+	std::shared_lock<std::shared_mutex> lock(nodesMutex);
+	nodes[parentIndex].childPointer = leafPointer | LEAF_NODE_FLAG;
+	nodes[parentIndex].childMask = 0xFFFFFFFF;
 }
 
 // Create children for a node and add them to the processing queue
@@ -234,7 +266,7 @@ void TreeManager::subdivideNode(
     float halfDiagonal = voxelSize * 1.732050808f * 0.5f;
 
     if (abs(lipschitz) > halfDiagonal * 1.01) {
-        uint32_t leafPointer = createLeaf(lipschitz, false);
+        uint32_t leafPointer = createLeaf(lipschitz);
 
         {
             std::shared_lock<std::shared_mutex> lock(nodesMutex);
@@ -249,18 +281,20 @@ void TreeManager::subdivideNode(
     int LOD = calculateLOD(treeDepth, distanceFromCamera, 128);
 
     // create voxel leaf if at smallest possible voxel resolution
-    if (depth >= LOD) {
-        //clamp to prevent steps smaller than voxel size
-        if (abs(distance) < voxelSize * minStep) {
-            distance = (distance >= 0 ? 1.0f : -1.0f) * voxelSize * minStep;
-        }
+    if (depth >= LOD - 1) {
+        // //clamp to prevent steps smaller than voxel size
+        // if (abs(distance) < voxelSize * minStep) {
+        //     distance = (distance >= 0 ? 1.0f : -1.0f) * voxelSize * minStep;
+        // }
 
-        uint32_t leafPointer = createLeaf(distance, true);
+        // uint32_t leafPointer = createLeaf(distance, true);
 
-        {
-            std::shared_lock<std::shared_mutex> lock(nodesMutex);
-            nodes[parentIndex].childPointer = leafPointer | LEAF_NODE_FLAG;
-        }
+        // {
+        //     std::shared_lock<std::shared_mutex> lock(nodesMutex);
+        //     nodes[parentIndex].childPointer = leafPointer | LEAF_NODE_FLAG;
+        // }
+
+        createLeaves(parentIndex, depth + 1, parentPosition);
 
         return;
     }

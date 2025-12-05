@@ -77,6 +77,33 @@ public struct TreeSDFResult {
 
 static const float3 rootOrigin = { 0, 0, 0 };
 
+struct indexResult {
+  float3 nodeCenter;
+  uint index;
+}
+
+indexResult getIndex(uint depth, float nodeSize, float3 relativePos) {
+  float invNodeSize = treeConstants::getInvNodeSize(depth);
+
+  // map position to 4x4x4 matrix, so we know which child to traverse to
+  // using inverted node size, because multiplication is cheaper than division
+  uint xIndex = clamp(uint(floor((relativePos.x * invNodeSize) + 2.0)), 0, 3);
+  uint yIndex = clamp(uint(floor((relativePos.y * invNodeSize) + 2.0)), 0, 3);
+  uint zIndex = clamp(uint(floor((relativePos.z * invNodeSize) + 2.0)), 0, 3);
+
+  uint childIndex = (zIndex << 4) + (yIndex << 2) + xIndex;
+
+  // precomputed voxel offsets
+  static const float offsets[4] = { -1.5, -0.5, 0.5, 1.5 };
+
+  indexResult result;
+  result.index = childIndex;
+  result.nodeCenter = { offsets[xIndex] * nodeSize, offsets[yIndex] * nodeSize,
+                        offsets[zIndex] * nodeSize };
+
+  return result;
+}
+
 public TreeSDFResult treeSDF(float3 worldPos,
                              StructuredBuffer<TreeNode> treeNodes,
                              StructuredBuffer<TreeLeaf> treeLeaves) {
@@ -88,13 +115,24 @@ public TreeSDFResult treeSDF(float3 worldPos,
 
   for (uint depth = 0; depth <= treeDepth; depth++) {
     if (bool(currentNode.childPointer & LEAF_FLAG)) {
+      uint indexOffset = 0;
+      // nodeSize = treeConstants.getNodeSize(depth);
+      if (currentNode.childMask != 0) {
+        depth++;
+        nodeSize = treeConstants.getNodeSize(depth);
+        float3 relativePos = worldPos - nodeCenter;
+        indexResult index = getIndex(depth, nodeSize, relativePos);
+        indexOffset = index.index;
+        nodeCenter += index.nodeCenter;
+      }
+
       uint leafIndex = currentNode.childPointer & ~LEAF_FLAG;
-      TreeLeaf leaf = treeLeaves[leafIndex];
+      TreeLeaf leaf = treeLeaves[leafIndex + indexOffset];
 
       TreeSDFResult result;
       result.voxel = leaf;
       result.depth = depth;
-      result.voxelSize = treeConstants.getNodeSize(depth);
+      result.voxelSize = nodeSize;
       result.voxelCenter = nodeCenter;
       return result;
     }
@@ -104,25 +142,12 @@ public TreeSDFResult treeSDF(float3 worldPos,
     nodeSize = treeConstants::getNodeSize(
         depth + 1); // 4x4x4 tree matrix means 1/4th the voxel edge size for
                     // every depth step
-    float invNodeSize = treeConstants::getInvNodeSize(depth + 1);
+    indexResult index = getIndex(depth + 1, nodeSize, relativePos);
 
-    // map position to 4x4x4 matrix, so we know which child to traverse to
-    // using inverted node size, because multiplication is cheaper than division
-    uint xIndex = clamp(uint(floor((relativePos.x * invNodeSize) + 2.0)), 0, 3);
-    uint yIndex = clamp(uint(floor((relativePos.y * invNodeSize) + 2.0)), 0, 3);
-    uint zIndex = clamp(uint(floor((relativePos.z * invNodeSize) + 2.0)), 0, 3);
+    // move to child node's center point
+    nodeCenter += index.nodeCenter;
 
-    uint childIndex = (zIndex << 4) + (yIndex << 2) + xIndex;
-
-    // precomputed voxel offsets
-    static const float offsets[4] = { -1.5, -0.5, 0.5, 1.5 };
-
-    // calculate child node's center point
-    nodeCenter.x += offsets[xIndex] * nodeSize;
-    nodeCenter.y += offsets[yIndex] * nodeSize;
-    nodeCenter.z += offsets[zIndex] * nodeSize;
-
-    uint childPointer = currentNode.childPointer + childIndex;
+    uint childPointer = currentNode.childPointer + index.index;
     currentNode = treeNodes[childPointer];
   }
 

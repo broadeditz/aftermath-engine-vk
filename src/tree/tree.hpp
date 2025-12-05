@@ -117,7 +117,8 @@ private:
     std::vector<float> voxelSizesAtDepth;
 
     // Thread-safe operations
-    uint32_t createLeaf(float distance, bool lod);
+    uint32_t createLeaf(float distance);
+    void createLeaves(uint32_t parentIndex, int parentDepth, vec3 parentPosition);
     void subdivideNode(uint32_t parentIndex, int parentDepth, vec3 parentPosition);
     void workerThread();
 

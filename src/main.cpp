@@ -331,11 +331,11 @@ private:
 
         camera.update(deltaTime);
 
-        computeScreen.treeManager.moveObserver({
-            camera.getPosition().x,
-            camera.getPosition().y,
-            camera.getPosition().z,
-        });
+        // computeScreen.treeManager.moveObserver({
+        //     camera.getPosition().x,
+        //     camera.getPosition().y,
+        //     camera.getPosition().z,
+        // });
 
         if (lastSecond + std::chrono::seconds(1) <= std::chrono::steady_clock::now()) {
             std::cout << "FPS: " << frameCounter << std::endl;
