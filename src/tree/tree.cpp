@@ -224,6 +224,7 @@ void TreeManager::createLeaves(uint32_t parentIndex, int depth, vec3 parentPosit
 	for (uint32_t i = 0; i < 64; i++) {
         vec3 childPosition = getChunkPosition(i, voxelSize, parentPosition);
         float distance = sampleDistanceAt(childPosition);
+        distance = getLipschitzBound(distance, voxelSize);
         if (abs(distance) < voxelSize * minStep) {
             distance = (distance >= 0 ? 1.0f : -1.0f) * voxelSize * minStep;
         }
@@ -260,13 +261,12 @@ void TreeManager::subdivideNode(
     float voxelSize = getVoxelSizeAtDepth(depth);
 
     float distance = sampleDistanceAt(parentPosition);
-    float lipschitz = getLipschitzBound(distance, voxelSize);
 
     // create sparsity leaf if the nearest surface is further than the size of the node
     float halfDiagonal = voxelSize * 1.732050808f * 0.5f;
 
-    if (abs(lipschitz) > halfDiagonal * 1.01) {
-        uint32_t leafPointer = createLeaf(lipschitz);
+    if (abs(distance) > halfDiagonal * 1.01) {
+        uint32_t leafPointer = createLeaf(getLipschitzBound(distance, voxelSize));
 
         {
             std::shared_lock<std::shared_mutex> lock(nodesMutex);
@@ -282,18 +282,6 @@ void TreeManager::subdivideNode(
 
     // create voxel leaf if at smallest possible voxel resolution
     if (depth >= LOD - 1) {
-        // //clamp to prevent steps smaller than voxel size
-        // if (abs(distance) < voxelSize * minStep) {
-        //     distance = (distance >= 0 ? 1.0f : -1.0f) * voxelSize * minStep;
-        // }
-
-        // uint32_t leafPointer = createLeaf(distance, true);
-
-        // {
-        //     std::shared_lock<std::shared_mutex> lock(nodesMutex);
-        //     nodes[parentIndex].childPointer = leafPointer | LEAF_NODE_FLAG;
-        // }
-
         createLeaves(parentIndex, depth + 1, parentPosition);
 
         return;

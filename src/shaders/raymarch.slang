@@ -76,14 +76,9 @@ public raymarchResult raymarch(float3 rayOrigin, float3 rayDirection,
       // Only use voxel exit if it's ahead of us and larger than SDF
       // Add small bias to ensure we actually exit the voxel
       if (tExit > 0) {
-        if (bool(result.voxel.flags & LOD_FLAG)) {
-          result.voxel.distance = tExit + epsilon * 2;
-        } else {
-          float distanceFromCenter =
-              length(currentPosition - result.voxelCenter);
-          result.voxel.distance = max(
-              result.voxel.distance - distanceFromCenter, tExit + epsilon * 2);
-        }
+        float distanceFromCenter = length(currentPosition - result.voxelCenter);
+        result.voxel.distance = max(result.voxel.distance - distanceFromCenter,
+                                    tExit + epsilon * 2);
       }
     }
 

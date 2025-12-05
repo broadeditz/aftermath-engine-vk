@@ -139,7 +139,7 @@ public TreeSDFResult treeSDF(float3 worldPos,
 
     float3 relativePos = worldPos - nodeCenter;
 
-    nodeSize = treeConstants::getNodeSize(
+    nodeSize = treeConstants.getNodeSize(
         depth + 1); // 4x4x4 tree matrix means 1/4th the voxel edge size for
                     // every depth step
     indexResult index = getIndex(depth + 1, nodeSize, relativePos);
