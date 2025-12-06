@@ -219,6 +219,8 @@ uint32_t TreeManager::createLeaf(float distance) {
 void TreeManager::createLeaves(uint32_t parentIndex, int depth, vec3 parentPosition) {
 	float voxelSize = getVoxelSizeAtDepth(depth);
 
+	uint64_t childMask = 0;
+
 	std::vector<TreeLeaf> newLeaves;
 	newLeaves.reserve(64);
 	for (uint32_t i = 0; i < 64; i++) {
@@ -229,9 +231,13 @@ void TreeManager::createLeaves(uint32_t parentIndex, int depth, vec3 parentPosit
             distance = (distance >= 0 ? 1.0f : -1.0f) * voxelSize * minStep;
         }
 
+        if (distance < 0) {
+            childMask |= (1ULL << i);
+        }
+
         TreeLeaf leaf = {
             .distance = distance,
-            .material = distance < 0 ? MaterialType::Dirt : MaterialType::Void,
+            .material = distance < 0 ? MaterialType::Grass : MaterialType::Void,
             .damage = 0,
             .flags = 1,
         };
@@ -248,7 +254,7 @@ void TreeManager::createLeaves(uint32_t parentIndex, int depth, vec3 parentPosit
 
 	std::shared_lock<std::shared_mutex> lock(nodesMutex);
 	nodes[parentIndex].childPointer = leafPointer | LEAF_NODE_FLAG;
-	nodes[parentIndex].childMask = 0xFFFFFFFF;
+	nodes[parentIndex].childMask = childMask;
 }
 
 // Create children for a node and add them to the processing queue
@@ -264,7 +270,6 @@ void TreeManager::subdivideNode(
 
     // create sparsity leaf if the nearest surface is further than the size of the node
     float halfDiagonal = voxelSize * 1.732050808f * 0.5f;
-
     if (abs(distance) > halfDiagonal * 1.01) {
         uint32_t leafPointer = createLeaf(getLipschitzBound(distance, voxelSize));
 
