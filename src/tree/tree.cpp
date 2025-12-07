@@ -200,7 +200,7 @@ uint32_t TreeManager::createLeaf(float distance) {
         material = MaterialType::Grass;
     }
 
-    uint8_t flags = 0;
+    uint8_t flags = LEAF_NODE_FLAG;
 
     TreeLeaf leaf = {
         .distance = distance,
@@ -219,8 +219,6 @@ uint32_t TreeManager::createLeaf(float distance) {
 void TreeManager::createLeaves(uint32_t parentIndex, int depth, vec3 parentPosition) {
 	float voxelSize = getVoxelSizeAtDepth(depth);
 
-	uint64_t childMask = 0;
-
 	std::vector<TreeLeaf> newLeaves;
 	newLeaves.reserve(64);
 	for (uint32_t i = 0; i < 64; i++) {
@@ -231,15 +229,11 @@ void TreeManager::createLeaves(uint32_t parentIndex, int depth, vec3 parentPosit
             distance = (distance >= 0 ? 1.0f : -1.0f) * voxelSize * minStep;
         }
 
-        if (distance < 0) {
-            childMask |= (1ULL << i);
-        }
-
         TreeLeaf leaf = {
             .distance = distance,
             .material = distance < 0 ? MaterialType::Grass : MaterialType::Void,
             .damage = 0,
-            .flags = 1,
+            .flags = LEAF_NODE_FLAG | LOD_NODE_FLAG,
         };
 
         newLeaves.push_back(leaf);
@@ -253,8 +247,8 @@ void TreeManager::createLeaves(uint32_t parentIndex, int depth, vec3 parentPosit
 	}
 
 	std::shared_lock<std::shared_mutex> lock(nodesMutex);
-	nodes[parentIndex].childPointer = leafPointer | LEAF_NODE_FLAG;
-	nodes[parentIndex].childMask = childMask;
+	nodes[parentIndex].childPointer = leafPointer;
+	nodes[parentIndex].flags = LEAF_NODE_FLAG | LOD_NODE_FLAG;
 }
 
 // Create children for a node and add them to the processing queue
@@ -275,7 +269,8 @@ void TreeManager::subdivideNode(
 
         {
             std::shared_lock<std::shared_mutex> lock(nodesMutex);
-            nodes[parentIndex].childPointer = leafPointer | LEAF_NODE_FLAG;
+            nodes[parentIndex].childPointer = leafPointer;
+            nodes[parentIndex].flags = LEAF_NODE_FLAG;
         }
 
         return;
@@ -360,7 +355,6 @@ void TreeManager::createTestTree() {
     rootNode.childPointer = 1; // First child at index 1
     nodes.push_back(rootNode);
 
-    uint32_t leafIndex = 0;
     float voxelSize = getVoxelSizeAtDepth(1);
 
     // Reserve space for all 64 root children first

@@ -1,4 +1,5 @@
 #pragma once
+#include <array>
 #include <vulkan/vulkan.h>
 #include <vma/vk_mem_alloc.h>
 #include <vector>
@@ -23,9 +24,9 @@ enum class MaterialType : uint8_t {
 
 // Tree node structure - must match shader definition
 struct TreeNode {
-	uint64_t childMask; // Bitmask of child pointers, it contains data pertaining to coalesced leaves.
     uint32_t childPointer; // Pointer to first child, if LEAF_NODE_FLAG is set, it means it's a leaf node, and contains the index for the leaf data.
-    uint32_t padding; // Padding to align the structure to 16 bytes, can be used for any purpose in the future.
+    uint8_t flags;
+    std::array<uint8_t,3> padding;
 };
 
 struct TreeLeaf {

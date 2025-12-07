@@ -33,14 +33,13 @@ void TreeManager::countNodesAtDepth(uint32_t nodeIndex, int depth,
 
     uint32_t childPointer = nodes[nodeIndex].childPointer;
 
-    if (childPointer & LEAF_NODE_FLAG) {
-        if (nodes[nodeIndex].childMask == 0) {
-	        // This is a sparsity leaf
-	        leavesPerLevel[depth]++;
+    if (nodes[nodeIndex].flags & LEAF_NODE_FLAG) {
+        if (nodes[nodeIndex].flags & LOD_NODE_FLAG) {
+	        // This is a regular leaf
+	        leavesPerLevel[depth + 1] += 64;
         } else {
-            // This is a regular leaf
-            // TODO: actully count mask
-            leavesPerLevel[depth + 1] += 64;
+        	// This is a sparsity leaf
+	        leavesPerLevel[depth]++;
         }
     }
     else if (childPointer != 0) {
@@ -61,9 +60,9 @@ void TreeManager::printTree(uint32_t nodeIndex, int depth, std::string prefix, b
 
     uint32_t childPointer = nodes[nodeIndex].childPointer;
 
-    if (childPointer & LEAF_NODE_FLAG) {
+    if (nodes[nodeIndex].flags & LEAF_NODE_FLAG) {
         // Leaf node
-        uint32_t leafIndex = childPointer & ~LEAF_NODE_FLAG;
+        uint32_t leafIndex = childPointer;
         if (leafIndex < leaves.size()) {
             float dist = leaves[leafIndex].distance;
             std::cout << "LEAF [dist=" << std::fixed << std::setprecision(2) << dist << "]";

@@ -1,16 +1,18 @@
 module tree;
 
 public struct TreeNode {
-  uint64_t childMask; // 64-bit mask of child nodes, each bit represents a child
-                      // node, 0 means the child is coalesced with neighboring
-                      // 0s, 1 means the child is a standalone leaf.
+  // uint64_t childMask; // 64-bit mask of child nodes, each bit represents a
+  // child
+  //  node, 0 means the child is coalesced with neighboring
+  //  0s, 1 means the child is a standalone leaf.
   // 32-bit index to first child in the buffer, all 64 children are guaranteed
   // to be contiguously indexed. If LEAF_FLAG is set, it means this is a leaf
-  // node, and contains the index for the leaf data instead. If it is a leaf
-  // node, it only has 1 leaf data node, not 64.
+  // node, and contains the index for the leaf data instead. If it is not an
+  // LOD_FLAG node, it only has 1 leaf data node, not 64.
   uint childPointer;
-  uint padding; // 32 bits padding to ensure alignment, can be used for future
-                // purposes.
+  uint8_t flags;
+  // uint8_t padding; // 24 bits/3 bytes padding left, can be used for future
+  //  purposes.
 }
 
 public struct TreeLeaf {
@@ -20,9 +22,8 @@ public struct TreeLeaf {
   public uint8_t flags;         // Bitwise flags with metadata about the leaf
 }
 
-public static const uint LOD_FLAG = 0x01;
-
-static const uint LEAF_FLAG = 0x80000000;
+public static const uint8_t LEAF_FLAG = 1 << 0;
+public static const uint8_t LOD_FLAG = 1 << 1;
 
 public static const uint treeDepth =
     9; // Max depth of the tree, before arriving at voxel resolution, directly
@@ -87,9 +88,9 @@ indexResult getIndex(uint depth, float nodeSize, float3 relativePos) {
 
   // map position to 4x4x4 matrix, so we know which child to traverse to
   // using inverted node size, because multiplication is cheaper than division
-  uint xIndex = clamp(uint(floor((relativePos.x * invNodeSize) + 2.0)), 0, 3);
-  uint yIndex = clamp(uint(floor((relativePos.y * invNodeSize) + 2.0)), 0, 3);
-  uint zIndex = clamp(uint(floor((relativePos.z * invNodeSize) + 2.0)), 0, 3);
+  uint xIndex = clamp(uint(floor((relativePos.x * invNodeSize) + 2)), 0, 3);
+  uint yIndex = clamp(uint(floor((relativePos.y * invNodeSize) + 2)), 0, 3);
+  uint zIndex = clamp(uint(floor((relativePos.z * invNodeSize) + 2)), 0, 3);
 
   uint childIndex = (zIndex << 4) + (yIndex << 2) + xIndex;
 
@@ -114,10 +115,10 @@ public TreeSDFResult treeSDF(float3 worldPos,
   float nodeSize = treeConstants::rootNodeSize;
 
   for (uint depth = 0; depth <= treeDepth; depth++) {
-    if (bool(currentNode.childPointer & LEAF_FLAG)) {
+    if (bool(currentNode.flags & LEAF_FLAG)) {
       uint indexOffset = 0;
-      // nodeSize = treeConstants.getNodeSize(depth);
-      if (currentNode.childMask != 0) {
+      // if (currentNode.childMask != 0) {
+      if (bool(currentNode.flags & LOD_FLAG)) {
         depth++;
         nodeSize = treeConstants.getNodeSize(depth);
         float3 relativePos = worldPos - nodeCenter;
@@ -126,7 +127,7 @@ public TreeSDFResult treeSDF(float3 worldPos,
         nodeCenter += index.nodeCenter;
       }
 
-      uint leafIndex = currentNode.childPointer & ~LEAF_FLAG;
+      uint leafIndex = currentNode.childPointer;
       TreeLeaf leaf = treeLeaves[leafIndex + indexOffset];
 
       TreeSDFResult result;

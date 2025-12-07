@@ -83,8 +83,7 @@ public raymarchResult raymarch(float3 rayOrigin, float3 rayDirection,
     }
 
     stepSize = result.voxel.distance;
-    // stepSize = smoothUnion(sceneSDF(currentPosition + float3(0, 0, 0)),
-    // result.voxel.distance, 0.4) - epsilon;
+    // stepSize = union(sceneSDF(currentPosition), result.voxel.distance);
 
     // stepSize = subtract(sceneSDF(currentPosition + float3(-3, 0, 0)),
     // stepSize);
@@ -139,5 +138,5 @@ public raymarchResult raymarch(float3 rayOrigin, float3 rayDirection,
 
 float sceneSDF(float3 pos) {
   // return sphere(pos - float3(0, -2, 4.5), 1);
-  return repeatingSphere(pos - float3(3.5, 3.5, 0), 1, float3(7, 7, 7));
+  return sphere(pos - float3(3.5, -3.5, 0), 5);
 }

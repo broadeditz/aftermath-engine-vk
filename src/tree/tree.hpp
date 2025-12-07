@@ -17,7 +17,9 @@
 #include "../util/channel.hpp"
 #include "../util/waitgroup.hpp"
 
-const uint32_t LEAF_NODE_FLAG = 0x80000000;
+const uint8_t LEAF_NODE_FLAG = 1 << 0;
+const uint8_t LOD_NODE_FLAG = 1 << 1;
+
 const int treeDepth = 9;
 const float baseVoxelSize = 0.25f;
 
