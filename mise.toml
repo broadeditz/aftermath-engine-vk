@@ -1,6 +1,26 @@
 [tasks.run]
 description = "Compile & run debug executable and shaders"
+depends = ["vcpkg-setup"]
 run = "zig build run"
+
+[tasks.vcpkg-setup]
+description = "Initialize vcpkg submodule and install dependencies"
+depends = ["vcpkg-submodule", "vcpkg-bootstrap", "vcpkg-install"]
+
+[tasks.vcpkg-submodule]
+description = "Update vcpkg submodule"
+run = "git submodule update --init --recursive"
+
+[tasks.vcpkg-bootstrap]
+description = "Bootstrap vcpkg"
+run = "external/vcpkg/bootstrap-vcpkg.sh"
+run_windows = "external/vcpkg/bootstrap-vcpkg.bat"
+outputs = ["external/vcpkg/vcpkg"]
+
+[tasks.vcpkg-install]
+description = "Install vcpkg dependencies"
+run = "external/vcpkg/vcpkg install"
+run_windows = "external/vcpkg/vcpkg.exe install"
 
 # Tools configuration
 [tools]
