@@ -59,22 +59,15 @@ public raymarchResult raymarch(float3 rayOrigin, float3 rayDirection,
     // For positive distances, try to skip to voxel boundary
     if (result.voxel.distance > epsilon) {
       float halfSize = result.voxelSize * 0.5;
-      float3 voxelMin = result.voxelCenter - halfSize;
-      float3 voxelMax = result.voxelCenter + halfSize;
-
-      // Proper ray-box intersection
       float3 clampedPos =
-          clamp(currentPosition, voxelMin + epsilon, voxelMax - epsilon);
-      float3 t1 = (voxelMin - clampedPos) * invDir;
-      float3 t2 = (voxelMax - clampedPos) * invDir;
+          clamp(currentPosition, result.voxelCenter - halfSize + epsilon,
+                result.voxelCenter + halfSize - epsilon);
 
-      float3 tNear = min(t1, t2);
-      float3 tFar = max(t1, t2);
+      float3 t = (result.voxelCenter +
+                  sign(currentDirection) * (halfSize)-clampedPos) *
+                 invDir;
+      float tExit = min(t.x, min(t.y, t.z));
 
-      float tExit = min(tFar.x, min(tFar.y, tFar.z));
-
-      // Only use voxel exit if it's ahead of us and larger than SDF
-      // Add small bias to ensure we actually exit the voxel
       if (tExit > 0) {
         float distanceFromCenter = length(currentPosition - result.voxelCenter);
         result.voxel.distance = max(result.voxel.distance - distanceFromCenter,
