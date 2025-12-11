@@ -38,6 +38,7 @@ inline vec3 sub(vec3 pos, vec3 move) {
 struct nodeToProcess {
     uint32_t parentNodeIndex;
     int depth;
+    uint32_t index;
     vec3 parentPosition;
 };
 
@@ -45,10 +46,17 @@ vec3 getChunkPosition(uint32_t chunkIndex, float voxelSize, vec3 parentPosition)
 int calculateLOD(int treeDepth, float distance, float lengthThreshold);
 float sampleDistanceAt(vec3 position);
 
+struct nodeParent {
+    uint32_t index;
+    uint32_t childIndex; // 0-63 index within parent node
+};
+
 class TreeManager {
 public:
     std::vector<TreeNode> nodes;
+    std::vector<nodeParent> nodeParents;
     std::deque<uint32_t> freeNodeIndices;
+
     std::vector<TreeLeaf> leaves;
     std::deque<uint32_t> freeLeafIndices;
 
@@ -121,7 +129,7 @@ private:
     // Thread-safe operations
     uint32_t createLeaf(float distance);
     void createLeaves(uint32_t parentIndex, int parentDepth, vec3 parentPosition);
-    void subdivideNode(uint32_t parentIndex, int parentDepth, vec3 parentPosition);
+    void subdivideNode(uint32_t parentIndex, int parentDepthm, uint32_t index, vec3 parentPosition);
     void workerThread();
 
     // TODO: store freed indices for reuse
@@ -143,8 +151,8 @@ private:
     }
 
     void startWorkers() {
-        unsigned int numThreads = std::thread::hardware_concurrency();
-        if (numThreads == 0) numThreads = 4;
+        unsigned int numThreads = std::thread::hardware_concurrency() - 1;
+        if (numThreads <= 0) numThreads = 4;
 
         workers.reserve(numThreads);
         for (unsigned int i = 0; i < numThreads; i++) {
@@ -164,6 +172,15 @@ private:
         workers.clear();
     }
 
+    void setChildMask(uint32_t nodeIndex, uint64_t bitPosition, uint64_t value) {
+     	std::atomic_ref<uint64_t> ref = std::atomic_ref<uint64_t>(nodes[nodeIndex].childMask);
+     	unsigned long long childMask = ref.fetch_or(value << bitPosition, std::memory_order_relaxed);
+      	if (childMask > 0 && nodeIndex != 0) {
+			nodeParent parent = nodeParents[nodeIndex];
+			setChildMask(parent.index, parent.childIndex, 1);
+       	}
+    }
+
     void markStaleNode(nodeToProcess node);
     void markStaleRecursive(uint32_t nodeIndex, int depth, vec3 nodePosition);
 
@@ -181,6 +198,7 @@ private:
 
         // Reserve space for all 64 children
         nodes.resize(nodes.size() + 64);
+        nodeParents.resize(nodeParents.size() + 64);
 
         return childPointer;
     }

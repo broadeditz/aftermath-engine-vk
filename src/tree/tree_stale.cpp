@@ -46,7 +46,8 @@ void TreeManager::markStaleRecursive(uint32_t nodeIndex, int depth, vec3 nodePos
 
                 // If LOD changed, mark node as stale with its metadata
                 if (oldLOD != newLOD) {
-                    markStaleNode({nodeIndex, depth, nodePosition});
+                    throw std::runtime_error("TODO: Implement LOD change handling");
+                    markStaleNode({nodeIndex, depth, 0, nodePosition});
                 }
             }
         }

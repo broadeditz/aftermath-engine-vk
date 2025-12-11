@@ -54,24 +54,86 @@ public raymarchResult raymarch(float3 rayOrigin, float3 rayDirection,
       currentDirection = normalize(rayDirection + offset);
     };
 
-    TreeSDFResult result = treeSDF(currentPosition, treeNodes, treeLeaves);
+    TreeSDFResult result =
+        // treeSDF(currentPosition, treeNodes, treeLeaves, memos, memoCount);
+        treeSDF(currentPosition, treeNodes, treeLeaves);
 
     // For positive distances, try to skip to voxel boundary
     if (result.voxel.distance > epsilon) {
+      // bool skip = false;
+      // if (result.childMask == 0) {
+      //   skip = true;
+      //   result.voxelSize *= 4;
+      //   result.voxelCenter = result.nodeCenter;
+      // }
+
       float halfSize = result.voxelSize * 0.5;
       float3 clampedPos =
           clamp(currentPosition, result.voxelCenter - halfSize + epsilon,
                 result.voxelCenter + halfSize - epsilon);
 
-      float3 t = (result.voxelCenter +
-                  sign(currentDirection) * (halfSize)-clampedPos) *
-                 invDir;
+      float3 dirSign = sign(currentDirection) * halfSize;
+
+      float3 exitPlane = result.voxelCenter + dirSign;
+
+      float3 t = (exitPlane - clampedPos) * invDir;
       float tExit = min(t.x, min(t.y, t.z));
 
       if (tExit > 0) {
+        float distanceToBoundary = tExit + epsilon * 2;
         float distanceFromCenter = length(currentPosition - result.voxelCenter);
-        result.voxel.distance = max(result.voxel.distance - distanceFromCenter,
-                                    tExit + epsilon * 2);
+        float leafDistance = result.voxel.distance - distanceFromCenter;
+        float dist = max(leafDistance, distanceToBoundary);
+
+        // if (!skip) {
+        float nodeSize = result.voxelSize * 4;
+        float nodeHalfSize = nodeSize * 0.5;
+
+        float3 voxelCenter = result.voxelCenter;
+
+        float3 tempPosition = currentPosition + currentDirection * dist;
+        // for (; all(abs(tempPosition - result.nodeCenter) <
+        //            nodeHalfSize - epsilon);) {
+        for (; all(abs(tempPosition - result.nodeCenter) <
+                   nodeHalfSize - epsilon);) {
+          float3 relativePos = tempPosition - result.nodeCenter;
+
+          indexResult index =
+              getIndex(result.depth, result.voxelSize, relativePos);
+          if (index.index > 63) {
+            break;
+          }
+          if (bool(result.childMask & 1ULL << index.index)) {
+            break;
+          }
+
+          float3 childCenter = result.nodeCenter + index.nodeCenter;
+
+          // float3 clampedPos =
+          //     clamp(tempPosition, childCenter - halfSize + epsilon,
+          //           childCenter + halfSize - epsilon);
+
+          float3 exitPlane = childCenter + dirSign;
+
+          float3 t = (exitPlane - tempPosition) * invDir;
+          float tExit = min(t.x, min(t.y, t.z));
+          if (tExit <= 0) {
+            break;
+          }
+
+          // int indexDelta = 0;
+
+          // if (exitPlane.x == tExit) {
+          //   indexDelta = sign(currentDirection.x);
+          //   voxelCenter.x += indexDelta;
+          // }
+
+          dist += tExit + epsilon;
+          tempPosition = currentPosition + currentDirection * dist;
+        }
+        // }
+
+        result.voxel.distance = dist;
       }
     }
 
@@ -114,7 +176,6 @@ public raymarchResult raymarch(float3 rayOrigin, float3 rayDirection,
     }
 
     currentPosition += currentDirection * stepSize;
-
     totalDistance += stepSize;
   }
 

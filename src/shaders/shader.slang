@@ -164,7 +164,7 @@ void computeMain(uint3 dispatchThreadID: SV_DispatchThreadID) {
       if (normalDotSun > 0.001) {
         float3 shadowOrigin = result.hitPosition + result.hitNormal * 0.02;
         raymarchResult shadowProbe =
-            raymarch(shadowOrigin, sunDirection, 50, 1000, 0.0001, treeNodes,
+            raymarch(shadowOrigin, sunDirection, 20, 1000, 0.0001, treeNodes,
                      treeLeaves, true);
 
         // Soft shadows - clamp to [0, 1]

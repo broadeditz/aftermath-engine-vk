@@ -219,6 +219,8 @@ uint32_t TreeManager::createLeaf(float distance) {
 void TreeManager::createLeaves(uint32_t parentIndex, int depth, vec3 parentPosition) {
 	float voxelSize = getVoxelSizeAtDepth(depth);
 
+	uint64_t childMask = 0;
+
 	std::vector<TreeLeaf> newLeaves;
 	newLeaves.reserve(64);
 	for (uint32_t i = 0; i < 64; i++) {
@@ -227,6 +229,10 @@ void TreeManager::createLeaves(uint32_t parentIndex, int depth, vec3 parentPosit
         distance = getLipschitzBound(distance, voxelSize);
         if (abs(distance) < voxelSize * minStep) {
             distance = (distance >= 0 ? 1.0f : -1.0f) * voxelSize * minStep;
+        }
+
+        if (distance < 0) {
+            childMask |= 1ULL << i;
         }
 
         TreeLeaf leaf = {
@@ -249,12 +255,14 @@ void TreeManager::createLeaves(uint32_t parentIndex, int depth, vec3 parentPosit
 	std::shared_lock<std::shared_mutex> lock(nodesMutex);
 	nodes[parentIndex].childPointer = leafPointer;
 	nodes[parentIndex].flags = LEAF_NODE_FLAG | LOD_NODE_FLAG;
+	nodes[parentIndex].childMask = childMask;
 }
 
 // Create children for a node and add them to the processing queue
 void TreeManager::subdivideNode(
     uint32_t parentIndex,
     int depth,
+    uint32_t index, // 0-63 index within parent's childMask
     vec3 parentPosition
 ) {
     //std::cout << depth << std::endl;
@@ -271,6 +279,11 @@ void TreeManager::subdivideNode(
             std::shared_lock<std::shared_mutex> lock(nodesMutex);
             nodes[parentIndex].childPointer = leafPointer;
             nodes[parentIndex].flags = LEAF_NODE_FLAG;
+
+            if (distance < 0) {
+	            nodeParent parent = nodeParents[parentIndex];
+	            setChildMask(parent.index, index, 1);
+            }
         }
 
         return;
@@ -283,6 +296,11 @@ void TreeManager::subdivideNode(
     // create voxel leaf if at smallest possible voxel resolution
     if (depth >= LOD - 1) {
         createLeaves(parentIndex, depth + 1, parentPosition);
+        std::shared_lock<std::shared_mutex> nodesLock(nodesMutex);
+        if (nodes[parentIndex].childMask > 0) {
+			nodeParent parent = nodeParents[parentIndex];
+			setChildMask(parent.index, index, 1);
+        }
 
         return;
     }
@@ -311,10 +329,11 @@ void TreeManager::subdivideNode(
         {
             std::shared_lock<std::shared_mutex> nodesLock(nodesMutex);
             nodes[childIndex] = childNode;
+            nodeParents[childIndex] = {parentIndex, i};
         }
 
         // Add child to queue for further processing (thread-safe)
-        newNodes.push_back(nodeToProcess{ childIndex, depth + 1, childPosition });
+        newNodes.push_back(nodeToProcess{ childIndex, depth + 1, i, childPosition });
     }
 
     wg.add(64);
@@ -334,7 +353,7 @@ void TreeManager::workerThread() {
         }
 
         // If we got work, process it
-        subdivideNode(current.parentNodeIndex, current.depth, current.parentPosition);
+        subdivideNode(current.parentNodeIndex, current.depth, current.index, current.parentPosition);
         wg.done();
     }
 
@@ -354,6 +373,7 @@ void TreeManager::createTestTree() {
     TreeNode rootNode = {};
     rootNode.childPointer = 1; // First child at index 1
     nodes.push_back(rootNode);
+    nodeParents.push_back({0, 0});
 
     float voxelSize = getVoxelSizeAtDepth(1);
 
@@ -363,13 +383,14 @@ void TreeManager::createTestTree() {
         TreeNode childNode = {};
         childNode.childPointer = 0;
         nodes.push_back(childNode);
+        nodeParents.push_back({0, i});
     }
 
     // Create 64 children (4×4×4 subdivision) and add to queue
     for (uint32_t i = 0; i < 64; i++) {
         vec3 childPosition = getChunkPosition(i, voxelSize, rootPosition);
         uint32_t childIndex = firstChildIndex + i;
-        queue.send(nodeToProcess{ childIndex, 1, childPosition });
+        queue.send(nodeToProcess{ childIndex, 1, i, childPosition });
     }
 
     // Initialize active worker counter

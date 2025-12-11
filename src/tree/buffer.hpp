@@ -27,6 +27,7 @@ struct TreeNode {
     uint32_t childPointer; // Pointer to first child, if LEAF_NODE_FLAG is set, it means it's a leaf node, and contains the index for the leaf data.
     uint8_t flags;
     std::array<uint8_t,3> padding;
+    uint64_t childMask;
 };
 
 struct TreeLeaf {
